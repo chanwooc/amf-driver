@@ -430,12 +430,33 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 
 	}
 
+
+	fprintf(stderr, "Debug Stats:\n" ); 
+	dev->debugDumpReq(0);   // echo-back debug message
+	dev->debugDumpReq(1);   // echo-back debug message
+	sleep(1);
+
 	fprintf(stderr, "Done initializing Hardware & DMA!\n" ); 
 }
 
+AmfManager::~AmfManager() {
+	fprintf(stderr, "Debug Stats:\n" ); 
+	dev->debugDumpReq(0);   // echo-back debug message
+	dev->debugDumpReq(1);   // echo-back debug message
+	sleep(1);
 
+	if (AftlDevToFile("aftl.bin")) {
+		fprintf(stderr, "[AmfManager] On close: failed to dump AFTL table data to aftl.bin\n");
+	}
 
+	killChecker = true;
+	pthread_join(readChecker, NULL);
 
+	delete dstDmaBuf;
+	delete srcDmaBuf;
+	delete dev;
+	delete ind;
+}
 
 void AmfManager::Read(uint32_t lpa, char *data, void *req) {
 	int tag = __getTag();
