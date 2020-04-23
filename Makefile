@@ -1,10 +1,16 @@
-OBJ_DIR := obj
+TARGET_NAME := libAmfManager.a
 
+OBJ_DIR := obj
 
 INCLUDES := \
 	-I connectal_lib \
 	-I connectal_lib/cpp \
 	-I device_ifc
+
+CXXFLAGS += -std=c++11 -g
+
+LIBS := \
+	-lm -lpthread -lrt
 
 SRCS := \
 	device_ifc/AmfIndication.c \
@@ -21,27 +27,21 @@ SRCS := \
 	connectal_lib/cpp/DmaBuffer.cpp \
 	connectal_lib/cpp/dmaManager.c \
 	connectal_lib/cpp/platformMemory.cpp \
-	connectal_lib/cpp/timer.c
-
-
-SRCS += AmfManager.cpp
-
-CXXFLAGS += -std=c++11 -g
-
-LIBS := \
-	-lm -lpthread -lrt
+	connectal_lib/cpp/timer.c \
+	AmfManager.cpp
 
 OBJS := \
 	$(SRCS:%.c=$(OBJ_DIR)/%.o) $(SRCS:%.cpp=$(OBJ_DIR)/%.o)
 
-all: libAmfManager.a
+.PHONY: all clean build
 
-libAmfManager.a: build $(OBJS)
+all: $(TARGET_NAME)
+
+$(TARGET_NAME): build $(OBJS)
 	$(AR) r $(@) $(OBJS)
 
 build:
 	@mkdir -p $(OBJ_DIR)
-
 
 $(OBJ_DIR)/%.o: %.c
 	@mkdir -p $(@D)
@@ -53,3 +53,4 @@ $(OBJ_DIR)/%.o: %.cpp
 
 clean:
 	rm -rf obj libAmfManager.a
+
