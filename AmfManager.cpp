@@ -9,15 +9,6 @@
 // Definition & other headers
 #include "AmfManager.h"
 
-#define NUM_CARDS 2
-#define PAGES_PER_BLOCK 256
-#define BLOCKS_PER_CHIP 4096
-#define CHIPS_PER_BUS 8
-#define NUM_BUSES 8
-
-#define NUM_SEGMENTS BLOCKS_PER_CHIP
-#define NUM_VIRTBLKS (NUM_CARDS*NUM_BUSES*CHIPS_PER_BUS)
-
 // Page Size (Physical chip support up to 8224 bytes, but using 8192 bytes for now)
 //  However, for DMA acks, we are using 8192*2 Bytes Buffer per TAG
 #define FPAGE_SIZE (8192*2)
@@ -25,21 +16,21 @@
 
 #define TABLE_SZ ((sizeof(uint16_t)*NUM_SEGMENTS*NUM_VIRTBLKS))
 
-size_t dstAlloc_sz = FPAGE_SIZE * NUM_TAGS * sizeof(char);
-size_t srcAlloc_sz = FPAGE_SIZE * NUM_TAGS * sizeof(char);
+#define DST_SZ FPAGE_SIZE*NUM_TAGS*sizeof(char)
+#define SRC_SZ FPAGE_SIZE*NUM_TAGS*sizeof(char)
 
 //
 // USER INTERFACE
 //
 static AmfManager *_priv = NULL; // only visible in this file
 
-AmfManager *AmfOpen() {
+AmfManager *AmfOpen(int mode) {
 	if (_priv != NULL) {
 		fprintf(stderr, "already open, so returning the same amfio_t\n");
 		return _priv;
 	}
 
-	_priv = new AmfManager;
+	_priv = new AmfManager(mode);
 	return _priv;
 };
 
@@ -85,21 +76,21 @@ int AmfErase(AmfManager* am, uint32_t lpa, void *req) {
 	return 0;
 }
 
-int SetReadCb(AmfManager* am,  void (*cbOk)(void*), void (*cbErr)(void*)); 
+int SetReadCb(AmfManager* am,  void (*cbOk)(void*), void (*cbErr)(void*)) {
 	if (__checkManager(am, "SetReadCb")) { return -1; } // check am and _priv
 
 	am->SetReadCb(cbOk, cbErr);
 	return 0;
 }
 
-int SetWriteCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
+int SetWriteCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*)) {
 	if (__checkManager(am, "SetWriteCb")) { return -1; } // check am and _priv
 
 	am->SetWriteCb(cbOk, cbErr);
 	return 0;
 }
 
-int SetEraseCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
+int SetEraseCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*)) {
 	if (__checkManager(am, "SetEraseCb")) { return -1; } // check am and _priv
 
 	am->SetEraseCb(cbOk, cbErr);
@@ -107,10 +98,10 @@ int SetEraseCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
 }
 
 //
-// AmfIndication (Device Ack Definition)
+// AmfDeviceAck (Device Ack Definition)
 //
 
-class AmfIndication: public AmfIndicationWrapper {
+class AmfDeviceAck: public AmfIndicationWrapper {
 	public:
 		void debugDumpResp (uint32_t debug0, uint32_t debug1,  uint32_t debug2, uint32_t debug3, uint32_t debug4, uint32_t debug5) {
 			fprintf(stderr, "LOG: DEBUG DUMP: gearSend = %u, gearRec = %u, aurSend = %u, aurRec = %u, readSend=%u, writeSend=%u\n"
@@ -122,7 +113,7 @@ class AmfIndication: public AmfIndicationWrapper {
 		}
 
 		void writeDone(uint8_t tag) {
-			InternalReqT *cur_req = &_priv->reqs[tag];
+			AmfManager::InternalReqT *cur_req = &_priv->reqs[tag];
 
 			if (cur_req->busy == false || cur_req->cmd != AmfWRITE) {
 				// something wrong
@@ -144,7 +135,7 @@ class AmfIndication: public AmfIndicationWrapper {
 			uint8_t isRawCmd = (status & 2)>>1;
 			uint8_t isBadBlock = status & 1;
 
-			InternalReqT *cur_req = &_priv->reqs[tag];
+			AmfManager::InternalReqT *cur_req = &_priv->reqs[tag];
 
 			if (cur_req->busy == false || cur_req->cmd != AmfERASE || cur_req->isRaw != (bool)isRawCmd) {
 				// something wrong
@@ -171,7 +162,7 @@ class AmfIndication: public AmfIndicationWrapper {
 
 		void respAftlFailed(AmfRequestT resp) {
 
-			InternalReqT *cur_req = &_priv->reqs[resp.tag];
+			AmfManager::InternalReqT *cur_req = &_priv->reqs[resp.tag];
 			if (cur_req->busy == false || cur_req->cmd != resp.cmd) {
 				// something wrong
 				fprintf(stderr, "**ERROR @ respAftlFailed: tag not used or user for other cmd\n");
@@ -194,7 +185,7 @@ class AmfIndication: public AmfIndicationWrapper {
 			cur_req->busy=false;
 
 			pthread_mutex_lock(&_priv->tagMutex);
-			_priv->tagQ.push(tag);
+			_priv->tagQ.push(resp.tag);
 			pthread_cond_broadcast(&_priv->tagCond);
 			pthread_mutex_unlock(&_priv->tagMutex);
 		}
@@ -204,7 +195,7 @@ class AmfIndication: public AmfIndicationWrapper {
 			int virt_blk = mappingReads%NUM_VIRTBLKS;
 			int seg = mappingReads/NUM_VIRTBLKS;
 
-			_priv->mapStatus[seg][virt_blk] = (allocated==0)?NOT_ALLOCATED:ALLOCATED;
+			_priv->mapStatus[seg][virt_blk] = (allocated)?AmfManager::ALLOCATED: AmfManager::NOT_ALLOCATED;
 			_priv->mappedBlock[seg][virt_blk] = block_num & 0x3fff;
 
 			if (mappingReads >= NUM_SEGMENTS*NUM_VIRTBLKS-1) {
@@ -224,7 +215,7 @@ class AmfIndication: public AmfIndicationWrapper {
 				uint8_t chip = (blkInfoReads >> 9) & 7;
 				uint16_t blk = (blkInfoReads & 511)*8+i;
 
-				_priv->blockStatus[card][bus][chip][blk] = (BlockStatusT)(blkinfo_vec[i]>>14);
+				_priv->blockStatus[card][bus][chip][blk] = (AmfManager::BlockStatusT)(blkinfo_vec[i]>>14);
 				_priv->blockPE[card][bus][chip][blk] = blkinfo_vec[i] & 0x3fff;
 
 			}
@@ -243,7 +234,7 @@ class AmfIndication: public AmfIndicationWrapper {
 			sem_post(&_priv->aftlStatusSem);
 		}
 
-		AmfIndication(unsigned int id, PortalTransportFunctions *transport = 0, void *param = 0, PortalPoller *poller = 0) : AmfIndicationWrapper(id, transport, param, poller), mappingReads(0), blkInfoReads(0){}
+		AmfDeviceAck(unsigned int id, PortalTransportFunctions *transport = 0, void *param = 0, PortalPoller *poller = 0) : AmfIndicationWrapper(id, transport, param, poller), mappingReads(0), blkInfoReads(0){}
 
 	private:
 		int mappingReads;
@@ -268,7 +259,7 @@ void *AmfManager::PollReadBuffer(void *self) {
 				continue;
 			}
 
-			memcpy(cur_req->data, flashReadBuf[tag], FPAGE_SIZE_VALID);
+			memcpy(cur_req->data, am->flashReadBuf[tag], FPAGE_SIZE_VALID);
 
 			// Read Callback if defined
 			if (am->rCb) am->rCb(cur_req->user_req);
@@ -306,11 +297,11 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 
 	// Device initialization
 	dev = new AmfRequestProxy(IfcNames_AmfRequestS2H);
-	ind = new AmfIndication(IfcNames_AmfIndicationH2S);
+	ind = new AmfDeviceAck(IfcNames_AmfIndicationH2S);
 
 	// Memory-allocation for DMA
-	dstDmaBuf = new DmaBuffer(dstAlloc_sz);
-	srcDmaBuf = new DmaBuffer(srcAlloc_sz);
+	dstDmaBuf = new DmaBuffer(DST_SZ);
+	srcDmaBuf = new DmaBuffer(SRC_SZ);
 
 	char *rBuf =  dstDmaBuf->buffer();
 	char *wBuf = srcDmaBuf->buffer();
@@ -346,11 +337,11 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 
 	for (int t = 0; t < NUM_TAGS; t++) {
 		reqs[t].busy = false;
-		reqs[t].user_req = false;
+		reqs[t].user_req = NULL;
 		tagQ.push(t);
 	}
-	pthread_mutex_init(&tagMutex);
-	pthread_cond_init(&tagCond);
+	pthread_mutex_init(&tagMutex, NULL);
+	pthread_cond_init(&tagCond, 0);
 
 
 	fprintf(stderr, "check aftl status and initilize the device\n"); 
@@ -511,7 +502,7 @@ void AmfManager::EraseRaw(int card, int bus, int chip, int block) {
 }
 
 
-int AmfManager::eRawCb(int tag, bool isBadBlock) {
+void AmfManager::eRawCb(int tag, bool isBadBlock) {
 	TagTableEntry entry = eraseRawTable[tag];
 	blockStatus[entry.card][entry.bus][entry.chip][entry.block] = isBadBlock? BAD: FREE;
 	blockPE[entry.card][entry.bus][entry.chip][entry.block]++;
