@@ -1,0 +1,703 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+// Connectal DMA interface
+#include "DmaBuffer.h"
+
+// Definition & other headers
+#include "AmfManager.h"
+
+#define NUM_CARDS 2
+#define PAGES_PER_BLOCK 256
+#define BLOCKS_PER_CHIP 4096
+#define CHIPS_PER_BUS 8
+#define NUM_BUSES 8
+
+#define NUM_SEGMENTS BLOCKS_PER_CHIP
+#define NUM_VIRTBLKS (NUM_CARDS*NUM_BUSES*CHIPS_PER_BUS)
+
+// Page Size (Physical chip support up to 8224 bytes, but using 8192 bytes for now)
+//  However, for DMA acks, we are using 8192*2 Bytes Buffer per TAG
+#define FPAGE_SIZE (8192*2)
+#define FPAGE_SIZE_VALID (8192)
+
+#define TABLE_SZ ((sizeof(uint16_t)*NUM_SEGMENTS*NUM_VIRTBLKS))
+
+size_t dstAlloc_sz = FPAGE_SIZE * NUM_TAGS * sizeof(char);
+size_t srcAlloc_sz = FPAGE_SIZE * NUM_TAGS * sizeof(char);
+
+//
+// USER INTERFACE
+//
+static AmfManager *_priv = NULL; // only visible in this file
+
+AmfManager *AmfOpen() {
+	if (_priv != NULL) {
+		fprintf(stderr, "already open, so returning the same amfio_t\n");
+		return _priv;
+	}
+
+	_priv = new AmfManager;
+	return _priv;
+};
+
+int __checkManager(AmfManager* am, const char* name) {
+	if (am == NULL) {
+		fprintf(stderr, "[%s] NULL pointer provided as a manager!\n", name);
+		return -1;
+	}
+	else if (am != _priv) {
+		fprintf(stderr, "[%s] Unknown Manager or Already Closed!\n", name);
+		return -1;
+	}
+	return 0; // normal
+}
+
+int AmfClose(AmfManager* am) {
+	if (__checkManager(am, "AmfClose")) { return -1; } // check am and _priv
+	
+	delete _priv; // closing the Manager;
+	_priv = NULL;
+
+	return 0;
+}
+
+int AmfRead(AmfManager* am, uint32_t lpa, char *data, void *req) {
+	if (__checkManager(am, "AmfRead")) { return -1; } // check am and _priv
+
+	am->Read(lpa, data, req);
+	return 0;
+}
+
+int AmfWrite(AmfManager* am, uint32_t lpa, char *data, void *req) {
+	if (__checkManager(am, "AmfWrite")) { return -1; } // check am and _priv
+
+	am->Write(lpa, data, req);
+	return 0;
+}
+
+int AmfErase(AmfManager* am, uint32_t lpa, void *req) {
+	if (__checkManager(am, "AmfErase")) { return -1; } // check am and _priv
+
+	am->Erase(lpa, req);
+	return 0;
+}
+
+int SetReadCb(AmfManager* am,  void (*cbOk)(void*), void (*cbErr)(void*)); 
+	if (__checkManager(am, "SetReadCb")) { return -1; } // check am and _priv
+
+	am->SetReadCb(cbOk, cbErr);
+	return 0;
+}
+
+int SetWriteCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
+	if (__checkManager(am, "SetWriteCb")) { return -1; } // check am and _priv
+
+	am->SetWriteCb(cbOk, cbErr);
+	return 0;
+}
+
+int SetEraseCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
+	if (__checkManager(am, "SetEraseCb")) { return -1; } // check am and _priv
+
+	am->SetEraseCb(cbOk, cbErr);
+	return 0;
+}
+
+//
+// AmfIndication (Device Ack Definition)
+//
+
+class AmfIndication: public AmfIndicationWrapper {
+	public:
+		void debugDumpResp (uint32_t debug0, uint32_t debug1,  uint32_t debug2, uint32_t debug3, uint32_t debug4, uint32_t debug5) {
+			fprintf(stderr, "LOG: DEBUG DUMP: gearSend = %u, gearRec = %u, aurSend = %u, aurRec = %u, readSend=%u, writeSend=%u\n"
+					, debug0, debug1, debug2, debug3, debug4, debug5);
+		}
+
+		void readDone(uint8_t tag) {
+			fprintf(stderr, "**ERROR: this readDone should have never come\n");
+		}
+
+		void writeDone(uint8_t tag) {
+			InternalReqT *cur_req = &_priv->reqs[tag];
+
+			if (cur_req->busy == false || cur_req->cmd != AmfWRITE) {
+				// something wrong
+				fprintf(stderr, "**ERROR @ writeDone: tag not used or user for other cmd\n");
+				return;
+			}
+
+			if (_priv->wCb) _priv->wCb(cur_req->user_req);
+
+			cur_req->busy=false;
+
+			pthread_mutex_lock(&_priv->tagMutex);
+			_priv->tagQ.push(tag);
+			pthread_cond_broadcast(&_priv->tagCond);
+			pthread_mutex_unlock(&_priv->tagMutex);
+		}
+
+		void eraseDone(uint8_t tag, uint8_t status) {
+			uint8_t isRawCmd = (status & 2)>>1;
+			uint8_t isBadBlock = status & 1;
+
+			InternalReqT *cur_req = &_priv->reqs[tag];
+
+			if (cur_req->busy == false || cur_req->cmd != AmfERASE || cur_req->isRaw != (bool)isRawCmd) {
+				// something wrong
+				fprintf(stderr, "**ERROR @ eraseDone: tag not used or user for other cmd or raw cmd error\n");
+				return;
+			}
+
+			if (isRawCmd) {
+				// Raw Cmds for AFTL tables
+				_priv->eRawCb(tag, isBadBlock?true:false);
+			} else {
+				// Normal IO by user
+				if (_priv->eCb) _priv->eCb(cur_req->user_req);
+			}
+
+			cur_req->busy=false;
+
+			pthread_mutex_lock(&_priv->tagMutex);
+			_priv->tagQ.push(tag);
+			pthread_cond_broadcast(&_priv->tagCond);
+			pthread_mutex_unlock(&_priv->tagMutex);
+		}
+
+
+		void respAftlFailed(AmfRequestT resp) {
+
+			InternalReqT *cur_req = &_priv->reqs[resp.tag];
+			if (cur_req->busy == false || cur_req->cmd != resp.cmd) {
+				// something wrong
+				fprintf(stderr, "**ERROR @ respAftlFailed: tag not used or user for other cmd\n");
+				return;
+			}
+
+			if (resp.cmd == AmfREAD) {
+				if (_priv->rErrCb) _priv->rErrCb(cur_req->user_req);
+			}
+			else if (resp.cmd ==  AmfWRITE) {
+				if (_priv->wErrCb) _priv->wErrCb(cur_req->user_req);
+			}
+			else if (resp.cmd == AmfERASE) {
+				if (_priv->eErrCb) _priv->eErrCb(cur_req->user_req);
+			}
+			else {
+				fprintf(stderr, "**ERROR @ respAftlFailed: unknown AFTL Cmd\n");
+			}
+
+			cur_req->busy=false;
+
+			pthread_mutex_lock(&_priv->tagMutex);
+			_priv->tagQ.push(tag);
+			pthread_cond_broadcast(&_priv->tagCond);
+			pthread_mutex_unlock(&_priv->tagMutex);
+		}
+
+		void respReadMapping(uint8_t allocated, uint16_t block_num) {
+			// TODO
+			int virt_blk = mappingReads%NUM_VIRTBLKS;
+			int seg = mappingReads/NUM_VIRTBLKS;
+
+			_priv->mapStatus[seg][virt_blk] = (allocated==0)?NOT_ALLOCATED:ALLOCATED;
+			_priv->mappedBlock[seg][virt_blk] = block_num & 0x3fff;
+
+			if (mappingReads >= NUM_SEGMENTS*NUM_VIRTBLKS-1) {
+				mappingReads = 0;
+				sem_post(&_priv->aftlReadSem);
+			} else {
+				mappingReads++;
+			}
+		}
+
+		void respReadBlkInfo(const uint16_t* blkinfo_vec ) {
+			// TODO
+			//fprintf(stderr, "respReadBlkInfo:\n");
+			for (int i =0; i<8; i++) {
+				uint8_t card = (blkInfoReads >> 15);
+				uint8_t bus = (blkInfoReads >> 12) & 7;
+				uint8_t chip = (blkInfoReads >> 9) & 7;
+				uint16_t blk = (blkInfoReads & 511)*8+i;
+
+				_priv->blockStatus[card][bus][chip][blk] = (BlockStatusT)(blkinfo_vec[i]>>14);
+				_priv->blockPE[card][bus][chip][blk] = blkinfo_vec[i] & 0x3fff;
+
+			}
+
+			int maxBlkInfoReads = NUM_CARDS*NUM_BUSES*CHIPS_PER_BUS*BLOCKS_PER_CHIP/8;
+			if (blkInfoReads >= maxBlkInfoReads-1) {
+				blkInfoReads = 0;
+				sem_post(&_priv->aftlReadSem);
+			} else {
+				blkInfoReads++;
+			}
+		}
+
+		void respAftlLoaded(uint8_t resp) {
+			fprintf(stderr, "AFTL loaded = %u\n", resp);
+			sem_post(&_priv->aftlStatusSem);
+		}
+
+		AmfIndication(unsigned int id, PortalTransportFunctions *transport = 0, void *param = 0, PortalPoller *poller = 0) : AmfIndicationWrapper(id, transport, param, poller), mappingReads(0), blkInfoReads(0){}
+
+	private:
+		int mappingReads;
+		int blkInfoReads;
+};
+
+
+// Static member funcion used by Read Done Thread 
+void *AmfManager::PollReadBuffer(void *self) {
+	uint16_t tag = NUM_TAGS-1;
+	uint32_t flag_word_offset = FPAGE_SIZE_VALID/sizeof(uint32_t);
+
+	AmfManager *am = (AmfManager*)self;
+	InternalReqT *cur_req = &am->reqs[tag];
+
+	while (!am->killChecker) {
+		tag = (tag+1)%NUM_TAGS;
+		if (am->flashReadBuf[tag][flag_word_offset] == (uint32_t)-1 ) {
+			if(cur_req->busy == false || cur_req->cmd != AmfREAD) {
+				// something wrong
+				fprintf(stderr, "**ERROR @ readDone: tag not used or user for other cmd\n");
+				continue;
+			}
+
+			memcpy(cur_req->data, flashReadBuf[tag], FPAGE_SIZE_VALID);
+
+			// Read Callback if defined
+			if (am->rCb) am->rCb(cur_req->user_req);
+
+			// Collect tag & clear in-flight req
+			cur_req->busy=false;
+
+			pthread_mutex_lock(&am->tagMutex);
+			am->tagQ.push(tag);
+			pthread_cond_broadcast(&am->tagCond);
+			pthread_mutex_unlock(&am->tagMutex);
+
+			// Clear done flag
+			am->flashReadBuf[tag][flag_word_offset] = 0;
+		}
+	}
+	return NULL;
+}
+
+//
+// AmfManager
+//
+AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NULL), wCb(NULL), eCb(NULL), rErrCb(NULL), wErrCb(NULL), eErrCb(NULL) {
+
+	if ( mode < 0 || mode >= 3) {
+		fprintf(stderr, "[AmfManager] valid open mode: 0, 1, 2");
+		exit(-1);
+	}
+
+
+	sem_init(&aftlStatusSem, 0, 0);
+	sem_init(&aftlReadSem, 0, 0);
+
+	fprintf(stderr, "Initializing Connectal & DMA...\n");
+
+	// Device initialization
+	dev = new AmfRequestProxy(IfcNames_AmfRequestS2H);
+	ind = new AmfIndication(IfcNames_AmfIndicationH2S);
+
+	// Memory-allocation for DMA
+	dstDmaBuf = new DmaBuffer(dstAlloc_sz);
+	srcDmaBuf = new DmaBuffer(srcAlloc_sz);
+
+	char *rBuf =  dstDmaBuf->buffer();
+	char *wBuf = srcDmaBuf->buffer();
+
+	for (int t = 0; t < NUM_CARDS; t++) {
+		flashReadBuf[t] = (uint32_t*)(rBuf + t*FPAGE_SIZE);
+		flashWriteBuf[t] = (uint32_t*)(wBuf + t*FPAGE_SIZE);
+	}
+
+	dstDmaBuf->cacheInvalidate(0, 1);
+	srcDmaBuf->cacheInvalidate(0, 1);
+
+	uint32_t ref_srcAlloc = srcDmaBuf->reference();
+	uint32_t ref_dstAlloc = dstDmaBuf->reference();
+
+	fprintf(stderr, "ref_dstAlloc = %x\n", ref_dstAlloc); 
+	fprintf(stderr, "ref_srcAlloc = %x\n", ref_srcAlloc); 
+	
+	dev->setDmaWriteRef(ref_dstAlloc);
+	dev->setDmaReadRef(ref_srcAlloc);
+
+	// read done checker thread
+	if(pthread_create(&readChecker, NULL, PollReadBuffer, this)) {
+		fprintf(stderr, "Error creating read checker thread\n");
+
+		delete dstDmaBuf;
+		delete srcDmaBuf;
+		delete dev;
+		delete ind;
+		exit(-1);
+	}
+	fprintf(stderr, "read checker thread created!\n"); 
+
+	for (int t = 0; t < NUM_TAGS; t++) {
+		reqs[t].busy = false;
+		reqs[t].user_req = false;
+		tagQ.push(t);
+	}
+	pthread_mutex_init(&tagMutex);
+	pthread_cond_init(&tagCond);
+
+
+	fprintf(stderr, "check aftl status and initilize the device\n"); 
+	if (mode == 0) {
+		if (!__isAftlTableLoaded()) {
+			// if device table not programmed, must use local "aftl.bin"
+			if (AftlFileToDev("aftl.bin")) {
+				fprintf(stderr, "You must provide aftl.bin when mode=0 & device-aftl not programmed\n");
+
+				delete dstDmaBuf;
+				delete srcDmaBuf;
+				delete dev;
+				delete ind;
+				exit(-1);
+			}
+			dev->setAftlLoaded();
+			aftlLoaded=true;
+		}
+		fprintf(stderr, "AMF Ready to use\n"); 
+	} else if (mode == 1) {
+		// erase what is mapped
+		if (!__isAftlTableLoaded()) {
+
+			if (AftlFileToDev("aftl.bin")) {
+				fprintf(stderr, "You must provide aftl.bin when mode=1 & device-aftl not programmed\n");
+
+				delete dstDmaBuf;
+				delete srcDmaBuf;
+				delete dev;
+				delete ind;
+				exit(-1);
+			}
+			dev->setAftlLoaded();
+			aftlLoaded=true;
+		}
+		fprintf(stderr, "AFTL status OK & erasing mapped lpas\n"); 
+		// erase only mapped info
+		for (int seg = 0; seg < NUM_SEGMENTS; seg++) {
+			for (int virt_blk = 0; virt_blk < NUM_VIRTBLKS; virt_blk++) {
+				if (mapStatus[seg][virt_blk] == ALLOCATED) {
+					uint32_t lpa = (virt_blk & (NUM_VIRTBLKS-1)) | (seg << 15); // reconstruct LPA
+					Erase(lpa, NULL);
+				}
+			}
+		}
+
+		int elapsed = 10000;
+		while (true) {
+			usleep(100);
+			if (elapsed == 0) {
+				elapsed = 10000;
+			} else {
+				elapsed--;
+			}
+			if (tagQ.size() == NUM_TAGS) break;
+		}
+		fprintf(stderr, "Mapped entry erased!!\n");
+
+
+	} else {
+		fprintf(stderr, "Resetting device; erase all blocks\n"); 
+		fprintf(stderr, "Existing AFTL & aftl.bin ignored\n"); 
+
+		// eraseAll & initialize no matter what
+		for (int blk = 0; blk <  BLOCKS_PER_CHIP; blk++) {
+			for (int chip = 0; chip < CHIPS_PER_BUS; chip++) {
+				for (int bus = 0; bus < NUM_BUSES; bus++) {
+					for (int card=0; card < NUM_CARDS; card++) {
+						EraseRaw(card, bus, chip, blk);
+					}
+				}
+			}
+		}
+
+		int elapsed = 10000;
+		while (true) {
+			usleep(100);
+			if (elapsed == 0) {
+				elapsed = 10000;
+			} else {
+				elapsed--;
+			}
+			if (tagQ.size() == NUM_TAGS) break;
+		}
+		fprintf(stderr, "All blocks erased!!\n");
+
+	}
+
+	fprintf(stderr, "Done initializing Hardware & DMA!\n" ); 
+}
+
+
+
+
+
+void AmfManager::Read(uint32_t lpa, char *data, void *req) {
+	int tag = __getTag();
+	reqs[tag].busy = true;
+	reqs[tag].cmd = AmfREAD;
+	reqs[tag].isRaw = false;
+	reqs[tag].user_req = req;
+	reqs[tag].data = data;
+
+	AmfRequestT myReq; // request used for device
+	myReq.tag = tag;
+	myReq.cmd = AmfREAD;
+	myReq.lpa = lpa;
+
+	dev->makeReq(myReq);
+}
+
+void AmfManager::Write(uint32_t lpa, char *data, void *req) {
+	int tag = __getTag();
+	reqs[tag].busy = true;
+	reqs[tag].cmd = AmfWRITE;
+	reqs[tag].isRaw = false;
+	reqs[tag].user_req = req;
+
+	memcpy(flashWriteBuf[tag], data, FPAGE_SIZE_VALID);
+
+	AmfRequestT myReq; // request used for device
+	myReq.tag = tag;
+	myReq.cmd = AmfWRITE;
+	myReq.lpa = lpa;
+
+	dev->makeReq(myReq);
+}
+
+void AmfManager::Erase(uint32_t lpa, void *req) {
+	int tag = __getTag();
+	reqs[tag].busy = true;
+	reqs[tag].cmd = AmfERASE;
+	reqs[tag].isRaw = false;
+	reqs[tag].user_req = req;
+
+	AmfRequestT myReq; // request used for device
+	myReq.tag = tag;
+	myReq.cmd = AmfERASE;
+	myReq.lpa = lpa;
+
+	dev->makeReq(myReq);
+}
+
+// Only for initializing device
+void AmfManager::EraseRaw(int card, int bus, int chip, int block) {
+	int tag = __getTag();
+	reqs[tag].busy = true;
+	reqs[tag].cmd = AmfERASE;
+	reqs[tag].isRaw = true;
+	reqs[tag].user_req = NULL;
+
+	eraseRawTable[tag].card = card;
+	eraseRawTable[tag].bus = bus;
+	eraseRawTable[tag].chip = chip;
+	eraseRawTable[tag].block = block;
+
+	dev->eraseRawBlock(card, bus, chip, block, tag);
+}
+
+
+int AmfManager::eRawCb(int tag, bool isBadBlock) {
+	TagTableEntry entry = eraseRawTable[tag];
+	blockStatus[entry.card][entry.bus][entry.chip][entry.block] = isBadBlock? BAD: FREE;
+	blockPE[entry.card][entry.bus][entry.chip][entry.block]++;
+}
+
+int AmfManager::AftlFileToDev(const char *path) {
+	if(__readTableFromFile(path)){
+		return -1;
+	}
+	__pushTableToDev();
+	return 0;
+}
+
+
+int AmfManager::AftlDevToFile(const char *path) {
+
+	__loadTableFromDev();
+	if(__writeTableToFile(path)) {
+		return -1;
+	}
+	return 0;
+}
+
+bool AmfManager::__isAftlTableLoaded() {
+	dev->askAftlLoaded();
+	sem_wait(&aftlStatusSem);
+
+	return aftlLoaded;
+}
+
+void AmfManager::__loadTableFromDev() {
+	int map_cnt = 0;
+	for (int seg=0; seg < NUM_SEGMENTS; seg++)  {
+		for (int virt_blk = 0; virt_blk < NUM_VIRTBLKS; virt_blk++) {
+			dev->readMapping(map_cnt);
+			map_cnt++;
+		}
+	}
+	sem_wait(&aftlReadSem);
+
+	int blk_cnt = 0;
+	for (int card=0; card < NUM_CARDS; card++) {
+		for (int bus = 0; bus < NUM_BUSES; bus++) {
+			for (int chip = 0; chip < CHIPS_PER_BUS; chip++) {
+				for (int blk = 0; blk < BLOCKS_PER_CHIP; blk++) {
+
+					int idx = blk % 8;
+					if (idx == 7) {
+						dev->readBlkInfo((uint16_t)(blk_cnt>>3));
+					}
+
+					blk_cnt++;
+				}
+			}
+		}
+	}
+	sem_wait(&aftlReadSem);
+}
+
+void AmfManager::__pushTableToDev() {
+	uint32_t map_cnt = 0;
+	for (int seg=0; seg < NUM_SEGMENTS; seg++)  {
+		for (int virt_blk = 0; virt_blk < NUM_VIRTBLKS; virt_blk++) {
+			dev->updateMapping(map_cnt, (mapStatus[seg][virt_blk]==ALLOCATED)?1:0, mappedBlock[seg][virt_blk]);
+			map_cnt++;
+		}
+	}
+
+	uint32_t blk_cnt = 0;
+	for (int card=0; card < NUM_CARDS; card++)  {
+		for (int bus = 0; bus < NUM_BUSES; bus++) {
+			for (int chip = 0; chip < CHIPS_PER_BUS; chip++) {
+				uint16_t entry_vec[8];
+
+				for (int blk = 0; blk < BLOCKS_PER_CHIP; blk++) {
+
+					int idx = blk % 8;
+					entry_vec[idx] = (uint16_t)(blockStatus[card][bus][chip][blk] << 14);
+
+					if (idx == 7) {
+						dev->updateBlkInfo((uint16_t)(blk_cnt>>3), entry_vec);
+					}
+
+					blk_cnt++;
+				}
+			}
+		}
+	}
+}
+
+int AmfManager::__readTableFromFile (const char *path) {
+	char *filebuf = new char[2*TABLE_SZ];
+
+	uint16_t (*mapRaw)[NUM_VIRTBLKS] = (uint16_t(*)[NUM_VIRTBLKS])(filebuf);
+	uint16_t (*blkInfoRaw)[NUM_BUSES][CHIPS_PER_BUS][BLOCKS_PER_CHIP] = (uint16_t(*)[NUM_BUSES][CHIPS_PER_BUS][BLOCKS_PER_CHIP])(filebuf+TABLE_SZ);
+
+	FILE *fp = fopen(path, "r");
+	if(fp) {
+		size_t rsz = fread(filebuf, 2*TABLE_SZ, 1, fp);
+		fclose(fp);
+
+		if (rsz == 0) {
+			fprintf(stderr, "[FileToAftl] error reading %s (size?)\n", path);
+			delete [] filebuf;
+			return -1;
+		}
+	} else {
+		fprintf(stderr, "[FileToAftl] %s does not exist\n", path);
+		delete [] filebuf;
+		return -1;
+	}
+
+	for (int i = 0; i < NUM_SEGMENTS; i++) {
+		for (int j = 0; j < NUM_VIRTBLKS; j++) {
+			mapStatus[i][j] = (MapStatusT)(mapRaw[i][j] >> 14);
+			mappedBlock[i][j] = mapRaw[i][j] & 0x3fff;
+		}
+	}
+
+	for (int i = 0; i < NUM_CARDS; i++) {
+		for (int j = 0; j < NUM_BUSES; j++) {
+			for (int k = 0; k < CHIPS_PER_BUS; k++) {
+				for (int l = 0; l < BLOCKS_PER_CHIP; l++) {
+					blockStatus[i][j][k][l] = (BlockStatusT)(blkInfoRaw[i][j][k][l] >> 14);
+					blockPE[i][j][k][l] = blkInfoRaw[i][j][k][l] & 0x3fff;
+				}
+			}
+		}
+	}
+
+	delete [] filebuf;
+	return 0;
+}
+
+int AmfManager::__writeTableToFile (const char* path) {
+	char *filebuf = new char[2*TABLE_SZ];
+
+	uint16_t (*mapRaw)[NUM_VIRTBLKS] = (uint16_t(*)[NUM_VIRTBLKS])(filebuf);
+	uint16_t (*blkInfoRaw)[NUM_BUSES][CHIPS_PER_BUS][BLOCKS_PER_CHIP] = (uint16_t(*)[NUM_BUSES][CHIPS_PER_BUS][BLOCKS_PER_CHIP])(filebuf+TABLE_SZ);
+
+	for (int i = 0; i < NUM_SEGMENTS; i++) {
+		for (int j = 0; j < NUM_VIRTBLKS; j++) {
+			mapRaw[i][j] = (mapStatus[i][j] << 14) | (mappedBlock[i][j] & 0x3fff);
+		}
+	}
+
+	for (int i = 0; i < NUM_CARDS; i++) {
+		for (int j = 0; j < NUM_BUSES; j++) {
+			for (int k = 0; k < CHIPS_PER_BUS; k++) {
+				for (int l = 0; l < BLOCKS_PER_CHIP; l++) {
+					blkInfoRaw[i][j][k][l] = (blockStatus[i][j][k][l] << 14) | (blockPE[i][j][k][l] & 0x3fff);
+				}
+			}
+		}
+	}
+
+	FILE *fp = fopen(path, "w");
+	if(fp) {
+		size_t wsz = fwrite(filebuf, 2*TABLE_SZ, 1, fp);
+		fclose(fp);
+
+		if (wsz == 0) {
+			fprintf(stderr, "[AftlToFile] Error writing %s\n", path);
+			delete [] filebuf;
+			return -1;
+		}
+	} else {
+		fprintf(stderr, "[AftlToFile] %s could not be open or created\n", path);
+		delete [] filebuf;
+		return -1;
+	}
+
+
+	delete [] filebuf;
+	return 0;
+}
+
+int AmfManager::__getTag () {
+	int tag = -1;
+	pthread_mutex_lock(&tagMutex);
+	while (tagQ.empty()) {
+		pthread_cond_wait(&tagCond, &tagMutex);
+	}
+	tag = tagQ.front();
+	tagQ.pop();
+	pthread_mutex_unlock(&tagMutex);
+
+	return tag;
+}
