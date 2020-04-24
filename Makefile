@@ -36,13 +36,6 @@ OBJS := \
 .PHONY: all clean build
 
 all: $(TARGET_NAME)
-
-example1.exe: $(TARGET_NAME) example1.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ example1.cpp $(TARGET_NAME) $(LIBS)
-
-hardReset.exe: $(TARGET_NAME) hardReset.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ hardReset.cpp $(TARGET_NAME) $(LIBS)
-
 $(TARGET_NAME): build $(OBJS)
 	$(AR) r $(@) $(OBJS)
 
@@ -58,5 +51,12 @@ $(OBJ_DIR)/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 clean:
-	rm -rf obj libAmfManager.a
+	rm -rf obj libAmfManager.a *.exe
+
+
+example1.exe: $(TARGET_NAME) example1.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ example1.cpp $(TARGET_NAME) $(LIBS)
+
+hardReset.exe: $(TARGET_NAME) hardReset.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ hardReset.cpp $(TARGET_NAME) $(LIBS)
 

@@ -52,7 +52,7 @@ int main() {
 	int elapsed;
 
 	for (unsigned int i=0; i< 10; i++) {
-		// will all fail because not mapped yet
+		// will all fail because not mapped yet (10 error messages)
 		AmfRead(am, i, buf, (void*)(uintptr_t)i);
 	}
 

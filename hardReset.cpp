@@ -41,6 +41,5 @@ int main() {
 	//   If AFTL is programmed or "aftl.bin" exists, PE counts will be honored
 	//   Erase All blocks in the system & clean up the table
 	AmfManager *am = AmfOpen(2); // mode == 2 (hard reset)
-
 	AmfClose(am); // close device and dump "aftl.bin"
 }
