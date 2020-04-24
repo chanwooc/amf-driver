@@ -23,14 +23,14 @@
 #define NUM_SEGMENTS BLOCKS_PER_CHIP
 #define NUM_VIRTBLKS (NUM_CARDS*NUM_BUSES*CHIPS_PER_BUS)
 
+class AmfManager;
+
 /* User Interface Definition
  *   return value:
  *     0: success
  *    -1: failed 
  */
-class AmfManager;
-
-/* mode
+/* Open mode
  *  0: Open the device as it is (no erase issued); AFTL must be programmed or "aftl.bin" must be present
  *  1: Clean Up device (Erase only mapped items); AFTL must be programmed or "aftl.bin" must be present
  *  2: Reset device (Erase All Blocks - hard erase); if AFTL is programmed or aftl.bin present, P/E counts will be honored
@@ -50,6 +50,7 @@ int SetWriteCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
 int SetEraseCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
 
 /* AmfManager to be instantiated only ONCE
+ * Methods & members should not be used explicitly
  */
 class AmfDeviceAck;
 class AmfManager {
