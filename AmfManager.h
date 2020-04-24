@@ -77,6 +77,8 @@ class AmfManager {
 		AmfDeviceAck *ind;   //
 		DmaBuffer *dstDmaBuf, *srcDmaBuf; //
 
+		pthread_mutex_t deviceLock; //
+
 		/* User buffer for DMA */
 		uint32_t *flashReadBuf[NUM_TAGS], *flashWriteBuf[NUM_TAGS]; //
 

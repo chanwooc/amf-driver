@@ -148,8 +148,13 @@ class AmfDeviceAck: public AmfIndicationWrapper {
 			} else {
 				// Normal IO by user
 				if (isBadBlock) {
-					fprintf(stderr, "FATAL ERROR: Unexpected Bad Block: -- re-init device\n");
-					exit(-1);
+					AmfRequestT myReq;
+					myReq.cmd = AmfMARKBAD;
+					myReq.lpa = cur_req->lpa;
+					pthread_mutex_lock(&_priv->deviceLock);
+					_priv->dev->makeReq(myReq);
+					pthread_mutex_unlock(&_priv->deviceLock);
+					fprintf(stderr, "WARNING: ** normal->bad block detected **\n");
 				}
 				if (_priv->eCb) _priv->eCb(cur_req->user_req);
 			}
@@ -305,6 +310,8 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 	// Device initialization
 	dev = new AmfRequestProxy(IfcNames_AmfRequestS2H);
 	ind = new AmfDeviceAck(IfcNames_AmfIndicationH2S);
+
+	pthread_mutex_init(&deviceLock, NULL);
 
 	// Memory-allocation for DMA
 	dstDmaBuf = new DmaBuffer(DST_SZ);
@@ -476,6 +483,13 @@ AmfManager::~AmfManager() {
 	killChecker = true;
 	pthread_join(readChecker, NULL);
 
+	pthread_mutex_destroy(&deviceLock);
+	pthread_mutex_destroy(&tagMutex);
+	pthread_cond_destroy(&tagCond);
+
+	sem_destroy(&aftlStatusSem);
+	sem_destroy(&aftlReadSem);
+
 	delete dstDmaBuf;
 	delete srcDmaBuf;
 	delete dev;
@@ -496,7 +510,9 @@ void AmfManager::Read(uint32_t lpa, char *data, void *req) {
 	myReq.cmd = AmfREAD;
 	myReq.lpa = lpa;
 
+	pthread_mutex_lock(&deviceLock);
 	dev->makeReq(myReq);
+	pthread_mutex_unlock(&deviceLock);
 }
 
 void AmfManager::Write(uint32_t lpa, char *data, void *req) {
@@ -514,7 +530,9 @@ void AmfManager::Write(uint32_t lpa, char *data, void *req) {
 	myReq.cmd = AmfWRITE;
 	myReq.lpa = lpa;
 
+	pthread_mutex_lock(&deviceLock);
 	dev->makeReq(myReq);
+	pthread_mutex_unlock(&deviceLock);
 }
 
 void AmfManager::Erase(uint32_t lpa, void *req) {
@@ -530,7 +548,9 @@ void AmfManager::Erase(uint32_t lpa, void *req) {
 	myReq.cmd = AmfERASE;
 	myReq.lpa = lpa;
 
+	pthread_mutex_lock(&deviceLock);
 	dev->makeReq(myReq);
+	pthread_mutex_unlock(&deviceLock);
 }
 
 // Only for initializing device
@@ -546,7 +566,9 @@ void AmfManager::EraseRaw(int card, int bus, int chip, int block) {
 	eraseRawTable[tag].chip = chip;
 	eraseRawTable[tag].block = block;
 
+	pthread_mutex_lock(&deviceLock);
 	dev->eraseRawBlock(card, bus, chip, block, tag);
+	pthread_mutex_unlock(&deviceLock);
 }
 
 
