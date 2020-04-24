@@ -1,8 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-
 // Connectal DMA interface
 #include "DmaBuffer.h"
 
@@ -30,11 +25,11 @@ AmfManager *AmfOpen(int mode) {
 		return _priv;
 	}
 
-	_priv = new AmfManager(mode);
-	return _priv;
+	AmfManager *tmp = new AmfManager(mode);
+	return _priv; // _priv is registered automatically in Constructor
 };
 
-int __checkManager(AmfManager* am, const char* name) {
+int __checkManager(AmfManager *am, const char* name) {
 	if (am == NULL) {
 		fprintf(stderr, "[%s] NULL pointer provided as a manager!\n", name);
 		return -1;
@@ -46,13 +41,17 @@ int __checkManager(AmfManager* am, const char* name) {
 	return 0; // normal
 }
 
-int AmfClose(AmfManager* am) {
+int AmfClose(AmfManager *am) {
 	if (__checkManager(am, "AmfClose")) { return -1; } // check am and _priv
 	
 	delete _priv; // closing the Manager;
 	_priv = NULL;
 
 	return 0;
+}
+
+bool IsAmfBusy(AmfManager *am) {
+	return am->IsBusy();
 }
 
 int AmfRead(AmfManager* am, uint32_t lpa, char *data, void *req) {
@@ -148,6 +147,10 @@ class AmfDeviceAck: public AmfIndicationWrapper {
 				_priv->eRawCb(tag, isBadBlock?true:false);
 			} else {
 				// Normal IO by user
+				if (isBadBlock) {
+					fprintf(stderr, "FATAL ERROR: Unexpected Bad Block: -- re-init device\n");
+					exit(-1);
+				}
 				if (_priv->eCb) _priv->eCb(cur_req->user_req);
 			}
 
@@ -230,7 +233,8 @@ class AmfDeviceAck: public AmfIndicationWrapper {
 		}
 
 		void respAftlLoaded(uint8_t resp) {
-			fprintf(stderr, "AFTL loaded = %u\n", resp);
+			_priv->aftlLoaded = (resp)?true:false;
+
 			sem_post(&_priv->aftlStatusSem);
 		}
 
@@ -248,11 +252,15 @@ void *AmfManager::PollReadBuffer(void *self) {
 	uint32_t flag_word_offset = FPAGE_SIZE_VALID/sizeof(uint32_t);
 
 	AmfManager *am = (AmfManager*)self;
-	InternalReqT *cur_req = &am->reqs[tag];
 
 	while (!am->killChecker) {
 		tag = (tag+1)%NUM_TAGS;
+		InternalReqT *cur_req = &am->reqs[tag];
+
 		if (am->flashReadBuf[tag][flag_word_offset] == (uint32_t)-1 ) {
+			// Clear done flag
+			am->flashReadBuf[tag][flag_word_offset] = 0;
+
 			if(cur_req->busy == false || cur_req->cmd != AmfREAD) {
 				// something wrong
 				fprintf(stderr, "**ERROR @ readDone: tag not used or user for other cmd\n");
@@ -272,8 +280,6 @@ void *AmfManager::PollReadBuffer(void *self) {
 			pthread_cond_broadcast(&am->tagCond);
 			pthread_mutex_unlock(&am->tagMutex);
 
-			// Clear done flag
-			am->flashReadBuf[tag][flag_word_offset] = 0;
 		}
 	}
 	return NULL;
@@ -289,6 +295,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 		exit(-1);
 	}
 
+	_priv = this;
 
 	sem_init(&aftlStatusSem, 0, 0);
 	sem_init(&aftlReadSem, 0, 0);
@@ -306,7 +313,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 	char *rBuf =  dstDmaBuf->buffer();
 	char *wBuf = srcDmaBuf->buffer();
 
-	for (int t = 0; t < NUM_CARDS; t++) {
+	for (int t = 0; t < NUM_TAGS; t++) {
 		flashReadBuf[t] = (uint32_t*)(rBuf + t*FPAGE_SIZE);
 		flashWriteBuf[t] = (uint32_t*)(wBuf + t*FPAGE_SIZE);
 	}
@@ -529,6 +536,10 @@ void AmfManager::eRawCb(int tag, bool isBadBlock) {
 	blockPE[entry.card][entry.bus][entry.chip][entry.block]++;
 }
 
+bool AmfManager::IsBusy() {
+	return (tagQ.size() != NUM_TAGS);
+}
+
 int AmfManager::AftlFileToDev(const char *path) {
 	if(__readTableFromFile(path)){
 		return -1;
@@ -546,6 +557,7 @@ int AmfManager::AftlDevToFile(const char *path) {
 	}
 	return 0;
 }
+
 
 bool AmfManager::__isAftlTableLoaded() {
 	dev->askAftlLoaded();

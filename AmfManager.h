@@ -10,6 +10,7 @@
 // Connectal HW-SW interface
 #include "AmfIndication.h"
 #include "AmfRequest.h"
+#include "DmaBuffer.h"
 
 #define NUM_TAGS 128
 
@@ -29,6 +30,7 @@ class AmfManager {
 	/* interface as non-member friend functions */
 	friend AmfManager *AmfOpen(int mode);
 	friend int AmfClose(AmfManager* am);
+	friend bool IsAmfBusy(AmfManager* am);
 	
 	friend int AmfRead(AmfManager* am, uint32_t lpa, char *data, void *req);  
 	friend int AmfWrite(AmfManager* am, uint32_t lpa, char *data, void *req);  
@@ -133,6 +135,8 @@ class AmfManager {
 		void SetWriteCb(void (*cbOk)(void*), void (*cbErr)(void*)) { wCb = cbOk; wErrCb = cbErr; }
 		void SetEraseCb(void (*cbOk)(void*), void (*cbErr)(void*)) { eCb = cbOk; eErrCb = cbErr; }
 
+		bool IsBusy();
+
 		// return 0: success, -1: failed
 		int AftlFileToDev(const char *path); 
 		int AftlDevToFile(const char *path);
@@ -158,6 +162,8 @@ class AmfManager {
  */
 AmfManager *AmfOpen(int mode);
 int AmfClose(AmfManager* am);
+
+bool IsAmfBusy(AmfManager* am);
 
 int AmfRead(AmfManager* am, uint32_t lpa, char *data, void *req);  
 int AmfWrite(AmfManager* am, uint32_t lpa, char *data, void *req);  
