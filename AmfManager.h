@@ -23,6 +23,32 @@
 #define NUM_SEGMENTS BLOCKS_PER_CHIP
 #define NUM_VIRTBLKS (NUM_CARDS*NUM_BUSES*CHIPS_PER_BUS)
 
+/* User Interface Definition
+ *   return value:
+ *     0: success
+ *    -1: failed 
+ */
+class AmfManager;
+
+/* mode
+ *  0: Open the device as it is (no erase issued); AFTL must be programmed or "aftl.bin" must be present
+ *  1: Clean Up device (Erase only mapped items); AFTL must be programmed or "aftl.bin" must be present
+ *  2: Reset device (Erase All Blocks - hard erase); if AFTL is programmed or aftl.bin present, P/E counts will be honored
+ */
+AmfManager *AmfOpen(int mode);
+
+int AmfClose(AmfManager* am);
+
+bool IsAmfBusy(AmfManager* am);
+
+int AmfRead(AmfManager* am, uint32_t lpa, char *data, void *req);  
+int AmfWrite(AmfManager* am, uint32_t lpa, char *data, void *req);  
+int AmfErase(AmfManager* am, uint32_t lpa, void *req);
+
+int SetReadCb(AmfManager* am,  void (*cbOk)(void*), void (*cbErr)(void*)); 
+int SetWriteCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
+int SetEraseCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
+
 /* AmfManager to be instantiated only ONCE
  */
 class AmfDeviceAck;
@@ -57,8 +83,9 @@ class AmfManager {
 		/* in-flight requests */
 		struct InternalReqT {
 			bool busy;
-			AmfCmdTypes cmd; // AmfREAD, AmfWRITE, AmfERASE
 			bool isRaw;
+			AmfCmdTypes cmd; // AmfREAD, AmfWRITE, AmfERASE
+			uint32_t lpa;
 			void *user_req;   // parameter for callback
 			char *data;
 		} reqs[NUM_TAGS]; //
@@ -155,20 +182,3 @@ class AmfManager {
 		int __getTag();
 };
 
-/* User Interface Definition
- *   return value:
- *     0: success
- *    -1: failed 
- */
-AmfManager *AmfOpen(int mode);
-int AmfClose(AmfManager* am);
-
-bool IsAmfBusy(AmfManager* am);
-
-int AmfRead(AmfManager* am, uint32_t lpa, char *data, void *req);  
-int AmfWrite(AmfManager* am, uint32_t lpa, char *data, void *req);  
-int AmfErase(AmfManager* am, uint32_t lpa, void *req);
-
-int SetReadCb(AmfManager* am,  void (*cbOk)(void*), void (*cbErr)(void*)); 
-int SetWriteCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
-int SetEraseCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));

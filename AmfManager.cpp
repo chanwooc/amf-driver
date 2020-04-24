@@ -383,6 +383,8 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 			}
 			dev->setAftlLoaded();
 			aftlLoaded=true;
+		} else {
+			__loadTableFromDev();
 		}
 		fprintf(stderr, "AFTL status OK & erasing mapped lpas\n"); 
 		// erase only mapped info
@@ -410,7 +412,13 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 
 	} else {
 		fprintf(stderr, "Resetting device; erase all blocks\n"); 
-		fprintf(stderr, "Existing AFTL & aftl.bin ignored\n"); 
+		fprintf(stderr, "Existing AFTL & aftl.bin PE honored if exists\n"); 
+
+		if (!__isAftlTableLoaded()) {
+			__readTableFromFile("aftl.bin");
+		} else {
+			__loadTableFromDev();
+		}
 
 		// eraseAll & initialize no matter what
 		for (int blk = 0; blk <  BLOCKS_PER_CHIP; blk++) {
@@ -435,6 +443,9 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 		}
 		fprintf(stderr, "All blocks erased!!\n");
 
+		__pushTableToDev();
+		dev->setAftlLoaded();
+		aftlLoaded=true;
 	}
 
 
@@ -472,6 +483,7 @@ void AmfManager::Read(uint32_t lpa, char *data, void *req) {
 	reqs[tag].isRaw = false;
 	reqs[tag].user_req = req;
 	reqs[tag].data = data;
+	reqs[tag].lpa = lpa;
 
 	AmfRequestT myReq; // request used for device
 	myReq.tag = tag;
@@ -487,6 +499,7 @@ void AmfManager::Write(uint32_t lpa, char *data, void *req) {
 	reqs[tag].cmd = AmfWRITE;
 	reqs[tag].isRaw = false;
 	reqs[tag].user_req = req;
+	reqs[tag].lpa = lpa;
 
 	memcpy(flashWriteBuf[tag], data, FPAGE_SIZE_VALID);
 
@@ -504,6 +517,7 @@ void AmfManager::Erase(uint32_t lpa, void *req) {
 	reqs[tag].cmd = AmfERASE;
 	reqs[tag].isRaw = false;
 	reqs[tag].user_req = req;
+	reqs[tag].lpa = lpa;
 
 	AmfRequestT myReq; // request used for device
 	myReq.tag = tag;
