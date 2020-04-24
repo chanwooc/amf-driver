@@ -42,7 +42,8 @@ int main() {
 	AmfManager *am = AmfOpen(1); // Erase only mapped blocks (written blocks) so that device is clean state
 
 	// register callbacks (erase has no callback for now)
-	SetReadCb(am, readCb, readErrorCb);
+	// SetReadCb(am, readCb, readErrorCb);
+	SetReadCb(am, NULL, readErrorCb); // you can register NULL as a callback (ignored)
 	SetWriteCb(am, writeCb, writeErrorCb);
 	SetEraseCb(am, eraseCb, eraseErrorCb);
 
