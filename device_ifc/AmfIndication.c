@@ -156,7 +156,7 @@ int AmfIndication_handleMessage(struct PortalInternal *p, unsigned int channel, 
         p->transport->recv(p, temp_working_addr, 2, &tmpfd);
         tmp = p->transport->read(p, &temp_working_addr);
         tempdata.respAftlFailed.resp.tag = (uint8_t)(((uint8_t)(((tmp)&0x3ul))<<5));
-        tempdata.respAftlFailed.resp.cmd = (AmfCmdTypes)(((tmp>>2)&0x3ul));
+        tempdata.respAftlFailed.resp.cmd = (AmfCmdTypes)(((tmp>>2)&0x7ul));
         tmp = p->transport->read(p, &temp_working_addr);
         tempdata.respAftlFailed.resp.lpa = (uint32_t)(((tmp)&0x7fffffful));
         tempdata.respAftlFailed.resp.tag |= (uint8_t)(((tmp>>27)&0x1ful));

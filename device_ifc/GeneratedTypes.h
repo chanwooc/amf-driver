@@ -4,7 +4,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-typedef enum AmfCmdTypes { AmfREAD, AmfWRITE, AmfERASE, AmfINVALID,  } AmfCmdTypes;
+typedef enum AmfCmdTypes { AmfREAD=0, AmfWRITE, AmfERASE, AmfMARKBAD, AmfINVALID,  } AmfCmdTypes;
 typedef struct AmfRequestT {
     AmfCmdTypes cmd;
     uint8_t tag : 7;

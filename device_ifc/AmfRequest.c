@@ -151,7 +151,7 @@ int AmfRequest_handleMessage(struct PortalInternal *p, unsigned int channel, int
         p->transport->recv(p, temp_working_addr, 2, &tmpfd);
         tmp = p->transport->read(p, &temp_working_addr);
         tempdata.makeReq.req.tag = (uint8_t)(((uint8_t)(((tmp)&0x3ul))<<5));
-        tempdata.makeReq.req.cmd = (AmfCmdTypes)(((tmp>>2)&0x3ul));
+        tempdata.makeReq.req.cmd = (AmfCmdTypes)(((tmp>>2)&0x7ul));
         tmp = p->transport->read(p, &temp_working_addr);
         tempdata.makeReq.req.lpa = (uint32_t)(((tmp)&0x7fffffful));
         tempdata.makeReq.req.tag |= (uint8_t)(((tmp>>27)&0x1ful));
