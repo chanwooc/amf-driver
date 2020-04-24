@@ -431,6 +431,12 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 			}
 		}
 
+		for (int seg=0; seg < NUM_SEGMENTS; seg++)  {
+			for (int virt_blk = 0; virt_blk < NUM_VIRTBLKS; virt_blk++) {
+				mapStatus[seg][virt_blk] = NOT_ALLOCATED;
+			}
+		}
+
 		int elapsed = 10000;
 		while (true) {
 			usleep(100);
