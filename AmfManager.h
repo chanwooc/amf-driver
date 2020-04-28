@@ -96,7 +96,7 @@ class AmfManager {
 		std::queue<int> tagQ; //
 
 		pthread_mutex_t tagMutex; //
-		pthread_cond_t tagCond; //
+		pthread_cond_t tagWaitCond; //
 
 		/* extra thread only for readDone */
 		pthread_t readChecker; //

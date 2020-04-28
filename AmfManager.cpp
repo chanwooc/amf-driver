@@ -125,8 +125,9 @@ class AmfDeviceAck: public AmfIndicationWrapper {
 			cur_req->busy=false;
 
 			pthread_mutex_lock(&_priv->tagMutex);
+			// if(_priv->tagQ.empty()) pthread_cond_signal(&_priv->tagWaitCond);
 			_priv->tagQ.push(tag);
-			pthread_cond_broadcast(&_priv->tagCond);
+			pthread_cond_broadcast(&_priv->tagWaitCond);
 			pthread_mutex_unlock(&_priv->tagMutex);
 		}
 
@@ -162,8 +163,9 @@ class AmfDeviceAck: public AmfIndicationWrapper {
 			cur_req->busy=false;
 
 			pthread_mutex_lock(&_priv->tagMutex);
+			// if(_priv->tagQ.empty()) pthread_cond_signal(&_priv->tagWaitCond);
 			_priv->tagQ.push(tag);
-			pthread_cond_broadcast(&_priv->tagCond);
+			pthread_cond_broadcast(&_priv->tagWaitCond);
 			pthread_mutex_unlock(&_priv->tagMutex);
 		}
 
@@ -193,8 +195,9 @@ class AmfDeviceAck: public AmfIndicationWrapper {
 			cur_req->busy=false;
 
 			pthread_mutex_lock(&_priv->tagMutex);
+			// if(_priv->tagQ.empty()) pthread_cond_signal(&_priv->tagWaitCond);
 			_priv->tagQ.push(resp.tag);
-			pthread_cond_broadcast(&_priv->tagCond);
+			pthread_cond_broadcast(&_priv->tagWaitCond);
 			pthread_mutex_unlock(&_priv->tagMutex);
 		}
 
@@ -281,8 +284,9 @@ void *AmfManager::PollReadBuffer(void *self) {
 			cur_req->busy=false;
 
 			pthread_mutex_lock(&am->tagMutex);
+			// if(_priv->tagQ.empty()) pthread_cond_signal(&_priv->tagWaitCond);
 			am->tagQ.push(tag);
-			pthread_cond_broadcast(&am->tagCond);
+			pthread_cond_broadcast(&am->tagWaitCond);
 			pthread_mutex_unlock(&am->tagMutex);
 
 		}
@@ -355,7 +359,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 		tagQ.push(t);
 	}
 	pthread_mutex_init(&tagMutex, NULL);
-	pthread_cond_init(&tagCond, 0);
+	pthread_cond_init(&tagWaitCond, 0);
 
 
 	fprintf(stderr, "check aftl status and initilize the device\n"); 
@@ -485,7 +489,7 @@ AmfManager::~AmfManager() {
 
 	pthread_mutex_destroy(&deviceLock);
 	pthread_mutex_destroy(&tagMutex);
-	pthread_cond_destroy(&tagCond);
+	pthread_cond_destroy(&tagWaitCond);
 
 	sem_destroy(&aftlStatusSem);
 	sem_destroy(&aftlReadSem);
@@ -579,6 +583,10 @@ void AmfManager::eRawCb(int tag, bool isBadBlock) {
 }
 
 bool AmfManager::IsBusy() {
+	pthread_mutex_lock(&tagMutex);
+	bool busy = tagQ.size() != NUM_TAGS;
+	pthread_mutex_unlock(&tagMutex);
+
 	return (tagQ.size() != NUM_TAGS);
 }
 
@@ -759,7 +767,7 @@ int AmfManager::__getTag () {
 	int tag = -1;
 	pthread_mutex_lock(&tagMutex);
 	while (tagQ.empty()) {
-		pthread_cond_wait(&tagCond, &tagMutex);
+		pthread_cond_wait(&tagWaitCond, &tagMutex);
 	}
 	tag = tagQ.front();
 	tagQ.pop();
