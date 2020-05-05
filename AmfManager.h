@@ -8,22 +8,32 @@
 #include <queue>
 
 // Connectal HW-SW interface
-#include "AmfIndication.h"
-#include "AmfRequest.h"
-#include "DmaBuffer.h"
+//#include "device_ifc/AmfIndication.h"
+//#include "device_ifc/AmfRequest.h"
+//#include "connectal_lib/cpp/DmaBuffer.h"
 
 #define NUM_TAGS 128
 
 #define NUM_CARDS 2
-#define PAGES_PER_BLOCK 256
-#define BLOCKS_PER_CHIP 4096
+#define PAGES_PER_BLOCK 256 //(8)
+#define BLOCKS_PER_CHIP 4096 //(12)
 #define CHIPS_PER_BUS 8
 #define NUM_BUSES 8
+#define PAGESIZE 8192
+#define PAGES_PER_SEGMENT 32768
 
 #define NUM_SEGMENTS BLOCKS_PER_CHIP
 #define NUM_VIRTBLKS (NUM_CARDS*NUM_BUSES*CHIPS_PER_BUS)
 
 class AmfManager;
+class AmfRequestProxy;
+class DmaBuffer;
+#ifndef __GENERATED_TYPES__ 
+//for using this file as interface header
+//it is completly same in device_ifc/GeneratedTypes.h 
+typedef enum AmfCmdTypes { AmfREAD=0, AmfWRITE, AmfERASE, AmfMARKBAD, AmfINVALID,  } AmfCmdTypes;
+#endif
+//extern enum AmfCmdTypes;
 
 /* User Interface Definition
  *   return value:
@@ -52,6 +62,7 @@ int SetEraseCb(AmfManager* am, void (*cbOk)(void*), void (*cbErr)(void*));
 /* AmfManager to be instantiated only ONCE
  * Methods & members should not be used explicitly
  */
+
 class AmfDeviceAck;
 class AmfManager {
 	/* interface as non-member friend functions */

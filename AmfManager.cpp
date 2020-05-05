@@ -1,4 +1,8 @@
 // Connectal DMA interface
+#include "device_ifc/AmfIndication.h"
+#include "device_ifc/AmfRequest.h"
+#include "connectal_lib/cpp/DmaBuffer.h"
+
 #include "DmaBuffer.h"
 
 // Definition & other headers
