@@ -1,3 +1,4 @@
 *.a
 *.exe
+aftl.bin
 obj/
