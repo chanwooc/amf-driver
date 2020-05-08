@@ -88,7 +88,7 @@ void eraseErrorCb(void *req) {
 }
 
 int main() {
-	AmfManager *am = AmfOpen(2); // Erase only mapped blocks (written blocks) so that device is clean state
+	AmfManager *am = AmfOpen(1); // Erase only mapped blocks (written blocks) so that device is clean state
 
 	SetReadCb(am, readCb, readErrorCb); // you can register NULL as a callback (ignored)
 	SetWriteCb(am, writeCb, writeErrorCb);
@@ -136,8 +136,9 @@ int main() {
 
 	clock_gettime(CLOCK_REALTIME, &start);
 	for (unsigned int i=0; i< TESTNUM; i++) {
-		test_struct *a=get_test_struct(i);
-		AmfRead(am, i, a->buf, (void*)a);
+
+		test_struct *my_req = get_test_struct(i);
+		AmfRead(am, i, my_req->buf, (void*)my_req);
 	}
 	clock_gettime(CLOCK_REALTIME, &now);
 
