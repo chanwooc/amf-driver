@@ -7,7 +7,7 @@ INCLUDES := \
 	-I connectal_lib/cpp \
 	-I device_ifc
 
-CXXFLAGS += -std=c++11 -g
+CXXFLAGS += -std=c++11 -g -O3
 
 LIBS := \
 	-lm -lpthread -lrt

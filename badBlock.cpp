@@ -7,7 +7,7 @@
 #include "AmfManager.h"
 #include "time.h"
 
-#define TESTNUM 100
+#define TESTNUM (TOTAL_PAGES-PAGES_PER_SEGMENT*100)
 
 int error_cnt;
 
@@ -136,7 +136,8 @@ int main() {
 
 	clock_gettime(CLOCK_REALTIME, &start);
 	for (unsigned int i=0; i< TESTNUM; i++) {
-		AmfRead(am, i, buf, (void*)get_test_struct(i));
+		test_struct *a=get_test_struct(i);
+		AmfRead(am, i, a->buf, (void*)a);
 	}
 	clock_gettime(CLOCK_REALTIME, &now);
 
