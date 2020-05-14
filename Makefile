@@ -7,7 +7,7 @@ INCLUDES := \
 	-I connectal_lib/cpp \
 	-I device_ifc
 
-CXXFLAGS += -std=c++11 -g -O3
+CXXFLAGS += -std=c++11 -g
 
 LIBS := \
 	-lm -lpthread -lrt
@@ -62,4 +62,7 @@ hardReset.exe: $(TARGET_NAME) hardReset.cpp
 
 badBlock.exe: $(TARGET_NAME) badBlock.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ badBlock.cpp $(TARGET_NAME) $(LIBS)
+
+fastRead.exe: $(TARGET_NAME) badBlock.cpp
+	$(CXX) $(CXXFLAGS) -DWRITESYNC -DFASTREAD $(INCLUDES) -o $@ badBlock.cpp $(TARGET_NAME) $(LIBS)
 
