@@ -46,8 +46,9 @@ bool check_buf(char *buf, uint32_t lpa){
 		if(lpa==(uint32_t)STARTPAGE + 10 && i<10){
 			printf("buf[%u]:%u %u\n", i, (char)buf[i], (char)a);
 		}*/
-		if(buf[i]!=a)
+		if(buf[i]!=a){
 			return false;
+		}
 	}
 	return true;
 }
@@ -72,12 +73,15 @@ void readCb(void *req) {
 		error_cnt++;
 	}
 	free(ts);
+#ifdef WRITESYNC
+	sem_post(&global_lock);
+#endif
 	// do nothing
 }
 
 void writeCb(void *req) {
 #ifdef WRITESYNC
-	sem_post(&global_lock);
+	//sem_post(&global_lock);
 #endif
 }
 
@@ -101,9 +105,18 @@ void eraseErrorCb(void *req) {
 	// do nothing
 }
 
-int main() {
+int main(int argc, char *arv[]) {
 	printf("Start page: %u, Test num:%u\n",STARTPAGE, TESTNUM);
-	AmfManager *am = AmfOpen(2); // Erase only mapped blocks (written blocks) so that device is clean state
+	AmfManager *am;
+	if(argc==1){
+		printf("delete all blocks!!!!\n");
+		am = AmfOpen(2); // Erase only mapped blocks (written blocks) so that device is clean state
+	}
+	else{
+		printf("delete written blocks!!!!\n");
+		am = AmfOpen(1);
+	}
+
 
 	SetReadCb(am, readCb, readErrorCb); // you can register NULL as a callback (ignored)
 	SetWriteCb(am, writeCb, writeErrorCb);
@@ -137,10 +150,14 @@ int main() {
 
 #ifdef FASTREAD
 	#ifdef WRITESYNC
-		sem_wait(&global_lock);
+		//sem_wait(&global_lock);
 	#endif
 		test_struct *my_req = get_test_struct(lba);
 		AmfRead(am, lba, my_req->buf, (void*)my_req);
+
+	#ifdef WRITESYNC
+		sem_wait(&global_lock);
+	#endif
 #endif
 	}
 	clock_gettime(CLOCK_REALTIME, &now);
