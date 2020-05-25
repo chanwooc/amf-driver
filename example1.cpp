@@ -72,9 +72,6 @@ int main() {
 	for (unsigned int i=0; i< 1024*1024/8*4; i++) {
 		AmfWrite(am, i, buf, (void*)(uintptr_t)i);
 	}
-	clock_gettime(CLOCK_REALTIME, &now);
-
-	fprintf(stderr, "WRITE SPEED: %f MB/s\n", ((1024*1024*4)/1000)/timespec_diff_sec(start,now));
 
 	elapsed = 10000;
 	while (true) {
@@ -86,6 +83,9 @@ int main() {
 		}
 		if (!IsAmfBusy(am)) break;
 	}
+	clock_gettime(CLOCK_REALTIME, &now);
+
+	fprintf(stderr, "WRITE SPEED: %f MB/s\n", ((1024*1024*4)/1000)/timespec_diff_sec(start,now));
 
 	AmfClose(am); // close device and dump "aftl.bin"
 
@@ -100,7 +100,6 @@ int main() {
 		// the last 5 items will fail..
 		AmfRead(am, i, buf, (void*)(uintptr_t)i);
 	}
-	clock_gettime(CLOCK_REALTIME, &now);
 
 	elapsed = 10000;
 	while (true) {
@@ -113,6 +112,7 @@ int main() {
 		if (!IsAmfBusy(am)) break;
 	}
 
+	clock_gettime(CLOCK_REALTIME, &now);
 	fprintf(stderr, "READ SPEED: %f MB/s\n", ((1024*1024*4)/1000)/timespec_diff_sec(start,now));
 
 	AmfClose(am); // close device and dump "aftl.bin"
