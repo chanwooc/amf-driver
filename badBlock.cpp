@@ -30,7 +30,8 @@ test_struct *get_test_struct(uint32_t lpa){
 void set_buf(char *buf, uint32_t lpa){
 	srand(lpa);
 	for(uint32_t i=0; i<8192; i++){
-		buf[i]=rand()%UINT8_MAX;
+		//buf[i]=rand()%UINT8_MAX;
+		buf[i]=(i+lpa)%UINT8_MAX;
 		/*
 		if(lpa==(uint32_t)STARTPAGE + 10 && i<10){
 			printf("buf[%u]:%u\n", i, (char)buf[i]);
@@ -40,17 +41,20 @@ void set_buf(char *buf, uint32_t lpa){
 
 bool check_buf(char *buf, uint32_t lpa){
 	srand(lpa);
+	bool ret = true;
 	for(uint32_t i=0; i<8192; i++){
-		char a=rand()%UINT8_MAX;
+		//char a=rand()%UINT8_MAX;
+		char a=(i+lpa)%UINT8_MAX;
 		/*
 		if(lpa==(uint32_t)STARTPAGE + 10 && i<10){
 			printf("buf[%u]:%u %u\n", i, (char)buf[i], (char)a);
 		}*/
-		if(buf[i]!=a){
-			return false;
+		if(buf[i]!=a) {
+			printf("Error detected lpa %d, %d-th Byte\n", lpa, i);
+			ret = false;
 		}
 	}
-	return true;
+	return ret;
 }
 
 void print_buf(char *buf){
