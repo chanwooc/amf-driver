@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "AmfManager.h"
 #include "time.h"
@@ -69,7 +70,7 @@ int main() {
 	}
 
 	clock_gettime(CLOCK_REALTIME, &start);
-	for (unsigned int i=0; i< 1024*1024/8*4; i++) {
+	for (unsigned int i=0; i< 1024*1024; i++) {
 		AmfWrite(am, i, buf, (void*)(uintptr_t)i);
 	}
 
@@ -85,7 +86,7 @@ int main() {
 	}
 	clock_gettime(CLOCK_REALTIME, &now);
 
-	fprintf(stderr, "WRITE SPEED: %f MB/s\n", ((1024*1024*4)/1000)/timespec_diff_sec(start,now));
+	fprintf(stderr, "WRITE SPEED: %f MB/s\n", ((8192.0*1024*1024)/1000000)/timespec_diff_sec(start,now));
 
 	AmfClose(am); // close device and dump "aftl.bin"
 
@@ -96,7 +97,7 @@ int main() {
 	SetEraseCb(am, eraseCb, eraseErrorCb);
 
 	clock_gettime(CLOCK_REALTIME, &start);
-	for (unsigned int i=0; i< 1024*1024/8*4 + 5; i++) {
+	for (unsigned int i=0; i< 1024*1024 + 5; i++) {
 		// the last 5 items will fail..
 		AmfRead(am, i, buf, (void*)(uintptr_t)i);
 	}
@@ -113,7 +114,7 @@ int main() {
 	}
 
 	clock_gettime(CLOCK_REALTIME, &now);
-	fprintf(stderr, "READ SPEED: %f MB/s\n", ((1024*1024*4)/1000)/timespec_diff_sec(start,now));
+	fprintf(stderr, "READ SPEED: %f MB/s\n", ((8192.0*1024*1024)/1000000)/timespec_diff_sec(start,now));
 
 	AmfClose(am); // close device and dump "aftl.bin"
 }
