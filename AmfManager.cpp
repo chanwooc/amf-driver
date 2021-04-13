@@ -336,8 +336,8 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 	dstDmaBuf->cacheInvalidate(0, 1);
 	srcDmaBuf->cacheInvalidate(0, 1);
 
-	uint32_t ref_srcAlloc = srcDmaBuf->reference();
 	uint32_t ref_dstAlloc = dstDmaBuf->reference();
+	uint32_t ref_srcAlloc = srcDmaBuf->reference();
 
 	fprintf(stderr, "ref_dstAlloc = %x\n", ref_dstAlloc); 
 	fprintf(stderr, "ref_srcAlloc = %x\n", ref_srcAlloc); 
@@ -368,6 +368,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 
 	fprintf(stderr, "check aftl status and initilize the device\n"); 
 	if (mode == 0) {
+		fprintf(stderr, "mode 0\n"); 
 		if (!__isAftlTableLoaded()) {
 			// if device table not programmed, must use local "aftl.bin"
 			if (AftlFileToDev("aftl.bin")) {
@@ -384,6 +385,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 		}
 		fprintf(stderr, "AMF Ready to use\n"); 
 	} else if (mode == 1) {
+		fprintf(stderr, "mode 1\n"); 
 		// erase what is mapped
 		if (!__isAftlTableLoaded()) {
 
@@ -399,15 +401,19 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 			dev->setAftlLoaded();
 			aftlLoaded=true;
 		} else {
+			fprintf(stderr, "aftl info reading from device\n"); 
 			__loadTableFromDev();
 		}
 		fprintf(stderr, "AFTL status OK & erasing mapped lpas\n"); 
+
+		int cnt = 0;
 		// erase only mapped info
 		for (int seg = 0; seg < NUM_SEGMENTS; seg++) {
 			for (int virt_blk = 0; virt_blk < NUM_VIRTBLKS; virt_blk++) {
 				if (mapStatus[seg][virt_blk] == ALLOCATED) {
 					uint32_t lpa = (virt_blk & (NUM_VIRTBLKS-1)) | (seg << 15); // reconstruct LPA
 					Erase(lpa, NULL);
+					cnt++;
 				}
 			}
 		}
@@ -422,10 +428,11 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 			}
 			if (tagQ.size() == NUM_TAGS) break;
 		}
-		fprintf(stderr, "Mapped entry erased!!\n");
+		fprintf(stderr, "Mapped entry (%d blocks) erased!!\n", cnt);
 
 
 	} else {
+		fprintf(stderr, "mode 2\n"); 
 		fprintf(stderr, "Resetting device; erase all blocks\n"); 
 		fprintf(stderr, "Existing AFTL & aftl.bin PE honored if exists\n"); 
 
@@ -470,23 +477,29 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 	}
 
 
-	fprintf(stderr, "Debug Stats:\n" ); 
+	fprintf(stderr, "AmfManager Constructor (this: %p)\n", this); 
+	fprintf(stderr, " > Debug Stats\n"); 
 	dev->debugDumpReq(0);   // echo-back debug message
 	dev->debugDumpReq(1);   // echo-back debug message
 	sleep(1);
 
 	fprintf(stderr, "Done initializing Hardware & DMA!\n" ); 
+	fflush(stderr);
 }
 
 AmfManager::~AmfManager() {
-	fprintf(stderr, "Debug Stats:\n" ); 
+	fprintf(stderr, "AmfManager Destructor (this: %p)\n", this); 
+	if (AftlDevToFile("aftl.bin")) {
+		fprintf(stderr, "[AmfManager] On close: failed to dump AFTL table data to aftl.bin\n");
+	}
+
+	fprintf(stderr, " > Debug Stats\n"); 
 	dev->debugDumpReq(0);   // echo-back debug message
 	dev->debugDumpReq(1);   // echo-back debug message
 	sleep(1);
 
-	if (AftlDevToFile("aftl.bin")) {
-		fprintf(stderr, "[AmfManager] On close: failed to dump AFTL table data to aftl.bin\n");
-	}
+
+	fflush(stderr);
 
 	killChecker = true;
 	pthread_join(readChecker, NULL);
