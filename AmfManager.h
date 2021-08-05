@@ -17,7 +17,8 @@
 #ifdef SLC
 #define NUM_CARDS 2             // MLC
 #define PAGES_PER_BLOCK 128     // 256
-#define BLOCKS_PER_CHIP 8192    // 4096
+//#define BLOCKS_PER_CHIP 8192    // 4096
+#define BLOCKS_PER_CHIP 4096    // 4096
 #define CHIPS_PER_BUS 4         // 8
 #define NUM_BUSES 8
 #define PAGESIZE 8192
@@ -33,7 +34,7 @@
 #endif
 
 // LPA: [seg#][page][chip][bus][card] bit widths
-// SLC    14    7     2     3     1     // 64  MB segment * 8192
+// SLC   14/13  7     2     3     1     // 64  MB segment * 4096   //8192
 // MLC    13    8     3     3     1     // 256 MB segment * 4096
 
 #define TOTAL_PAGES (PAGES_PER_SEGMENT * BLOCKS_PER_CHIP)
