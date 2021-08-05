@@ -8,8 +8,9 @@
 #include "AmfManager.h"
 #include "time.h"
 
-#define STARTPAGE (1*PAGES_PER_SEGMENT)
-#define TESTNUM (TOTAL_PAGES-PAGES_PER_SEGMENT*100)/512
+#define STARTPAGE (0*PAGES_PER_SEGMENT) // (1*PAGES_PER_SEGMENT)
+#define TESTNUM (50*PAGES_PER_SEGMENT) // (TOTAL_PAGES-PAGES_PER_SEGMENT*100)/512
+#define REPEAT 20
 
 int error_cnt;
 #ifdef WRITESYNC
@@ -28,30 +29,24 @@ test_struct *get_test_struct(uint32_t lpa){
 }
 
 void set_buf(char *buf, uint32_t lpa){
-	srand(lpa);
-	for(uint32_t i=0; i<8192; i++){
-		//buf[i]=rand()%UINT8_MAX;
-		buf[i]=(i+lpa)%UINT8_MAX;
-		/*
-		if(lpa==(uint32_t)STARTPAGE + 10 && i<10){
-			printf("buf[%u]:%u\n", i, (char)buf[i]);
-		}*/
+	//srand(lpa);
+	uint32_t* buf_cast = (uint32_t*)buf;
+	for(uint32_t i=0; i<8192/sizeof(uint32_t); i++){
+		buf_cast[i]=i+lpa;
 	}
 }
 
 bool check_buf(char *buf, uint32_t lpa){
-	srand(lpa);
+	//srand(lpa);
 	bool ret = true;
-	for(uint32_t i=0; i<8192; i++){
-		//char a=rand()%UINT8_MAX;
-		char a=(i+lpa)%UINT8_MAX;
-		/*
-		if(lpa==(uint32_t)STARTPAGE + 10 && i<10){
-			printf("buf[%u]:%u %u\n", i, (char)buf[i], (char)a);
-		}*/
-		if(buf[i]!=a) {
-			printf("Error detected lpa %d, %d-th Byte\n", lpa, i);
+
+	uint32_t* buf_cast = (uint32_t*)buf;
+	for(uint32_t i=0; i<8192/sizeof(uint32_t); i++){
+		uint32_t a=i+lpa;
+		if(buf_cast[i]!=a) {
+			printf("Error detected lpa %u, %u-th Word -- Expected %u Got %u\n", lpa, i, a, buf_cast[i]);
 			ret = false;
+			return false;
 		}
 	}
 	return ret;
@@ -75,6 +70,8 @@ void readCb(void *req) {
 	test_struct *ts=(test_struct*)req;
 	if(!check_buf(ts->buf,ts->lpa)){
 		error_cnt++;
+
+		if (error_cnt >= 10) exit(-1); // TODO; remove
 	}
 	free(ts);
 #ifdef WRITESYNC
@@ -110,17 +107,16 @@ void eraseErrorCb(void *req) {
 }
 
 int main(int argc, char *arv[]) {
-	printf("Start page: %u, Test num:%u\n",STARTPAGE, TESTNUM);
+	printf("Start page: %u, Test num:%u, Repeat: %u\n",STARTPAGE, TESTNUM, REPEAT);
 	AmfManager *am;
 	if(argc==1){
-		printf("delete all blocks!!!!\n");
-		am = AmfOpen(2); // Erase only mapped blocks (written blocks) so that device is clean state
+		printf("delete all blocks !!!!\n");
+		am = AmfOpen(2);
 	}
 	else{
-		printf("delete written blocks!!!!\n");
-		am = AmfOpen(1);
+		printf("delete written blocks only !!!!\n");
+		am = AmfOpen(1); // Erase only mapped blocks (written blocks) so that device is clean state
 	}
-
 
 	SetReadCb(am, readCb, readErrorCb); // you can register NULL as a callback (ignored)
 	SetWriteCb(am, writeCb, writeErrorCb);
@@ -128,7 +124,6 @@ int main(int argc, char *arv[]) {
 
 	char buf[8192];
 
-	timespec start, now;
 	int elapsed;
 	
 #ifdef FASTREAD
@@ -138,7 +133,6 @@ int main(int argc, char *arv[]) {
 #endif
 
 
-	clock_gettime(CLOCK_REALTIME, &start);
 	uint32_t start_page=STARTPAGE;
 	uint32_t test_num=TESTNUM;
 
@@ -146,71 +140,90 @@ int main(int argc, char *arv[]) {
 	sem_init(&global_lock, 0, 0);
 #endif
 
-	for (unsigned int i=0; i< test_num; i++) {
-		uint32_t lba=(i+start_page) % test_num;
-		set_buf(buf,lba);
-		AmfWrite(am, lba, buf, (void*)(uintptr_t)lba);
+	unsigned int numWrites = 0;
+	unsigned int numReads = 0;
 
+	for (unsigned int r=0; r< REPEAT; r++) {
+		for (unsigned int i=0; i< test_num; i++) {
+			if (i%2==0) continue; // TODO
+			uint32_t lba = start_page + r*test_num + i;
+			set_buf(buf,lba);
+			AmfWrite(am, lba, buf, (void*)(uintptr_t)lba);
+			numWrites++;
 
 #ifdef FASTREAD
-	#ifdef WRITESYNC
-		//sem_wait(&global_lock);
-	#endif
-		test_struct *my_req = get_test_struct(lba);
-		AmfRead(am, lba, my_req->buf, (void*)my_req);
+		#ifdef WRITESYNC
+			//sem_wait(&global_lock);
+		#endif
+			test_struct *my_req = get_test_struct(lba);
+			AmfRead(am, lba, my_req->buf, (void*)my_req);
+			numReads++;
 
-	#ifdef WRITESYNC
-		sem_wait(&global_lock);
-	#endif
+		#ifdef WRITESYNC
+			sem_wait(&global_lock);
+		#endif
+
 #endif
-	}
-	clock_gettime(CLOCK_REALTIME, &now);
-
-	fprintf(stderr, "WRITE SPEED: %f MB/s\n", ((1024*1024*4)/1000)/timespec_diff_sec(start,now));
-
-	elapsed = 10000;
-	while (true) {
-		usleep(100);
-		if (elapsed == 0) {
-			elapsed = 10000;
-		} else {
-			elapsed--;
+			if (i % (5*PAGES_PER_SEGMENT) == 0) usleep(1000*100);
 		}
-		if (!IsAmfBusy(am)) break;
-	}
+
+
+		elapsed = 10000;
+		while (true) {
+			usleep(100);
+			if (elapsed == 0) {
+				elapsed = 10000;
+			} else {
+				elapsed--;
+			}
+			if (!IsAmfBusy(am)) break;
+		}
+
+#ifdef FASTREAD
+		fprintf(stderr, "WRITE+READ check repeat=%u done\n", r);
+#else
+		fprintf(stderr, "WRITE only repeat=%u done\n", r);
+#endif
+		sleep(5);
 
 #ifdef REOPEN
-	AmfClose(am); // close device and dump "aftl.bin"
+		AmfClose(am); // close device and dump "aftl.bin"
 
-	am = AmfOpen(0); // mode = 0; Open the device as it is; AFTL must be programmed or aftl.bin must be provided
+		am = AmfOpen(0); // mode = 0; Open the device as it is; AFTL must be programmed or aftl.bin must be provided
 
-	SetReadCb(am, readCb, readErrorCb);
-	SetWriteCb(am, writeCb, writeErrorCb);
-	SetEraseCb(am, eraseCb, eraseErrorCb);
+		SetReadCb(am, readCb, readErrorCb);
+		SetWriteCb(am, writeCb, writeErrorCb);
+		SetEraseCb(am, eraseCb, eraseErrorCb);
 #endif
 
 #ifndef FASTREAD
-	clock_gettime(CLOCK_REALTIME, &start);
-	for (unsigned int i=0; i< test_num; i++) {
-		uint32_t lba=(i+start_page) % test_num;
-		test_struct *my_req = get_test_struct(lba);
-		AmfRead(am, lba, my_req->buf, (void*)my_req);
-	}
-	clock_gettime(CLOCK_REALTIME, &now);
-#endif
-
-	elapsed = 10000;
-	while (true) {
-		usleep(100);
-		if (elapsed == 0) {
-			elapsed = 10000;
-		} else {
-			elapsed--;
+		for (unsigned int i=0; i< test_num; i++) {
+			if (i%2==0) continue; // TODO
+			uint32_t lba = start_page + r*test_num + i;
+			test_struct *my_req = get_test_struct(lba);
+			AmfRead(am, lba, my_req->buf, (void*)my_req);
+			numReads++;
 		}
-		if (!IsAmfBusy(am)) break;
+
+		elapsed = 10000;
+		while (true) {
+			usleep(100);
+			if (elapsed == 0) {
+				elapsed = 10000;
+			} else {
+				elapsed--;
+			}
+			if (!IsAmfBusy(am)) break;
+		}
+
+		fprintf(stderr, "READ check repeat=%u done\n", r);
+		sleep(5);
+#endif
 	}
 
-	fprintf(stderr, "READ SPEED: %f MB/s\n", ((1024*1024*4)/1000)/timespec_diff_sec(start,now));
+
+	printf("Total Writes:%u pages, %u segments\n",numWrites,numWrites/PAGES_PER_SEGMENT);
+	printf("Total Reads :%u pages, %u segments\n",numReads,numReads/PAGES_PER_SEGMENT);
 	printf("error cnt:%u\n",error_cnt);
 
 	AmfClose(am); // close device and dump "aftl.bin"

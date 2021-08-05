@@ -225,10 +225,18 @@ class AmfDeviceAck: public AmfIndicationWrapper {
 			// TODO
 			//fprintf(stderr, "respReadBlkInfo:\n");
 			for (int i =0; i<8; i++) {
+
+#ifdef SLC // 1-bit card, 3-bit bus, 2-bit chip, 10-bit (1024) 8-blocks
+				uint8_t card = (blkInfoReads >> 15);
+				uint8_t bus = (blkInfoReads >> 12) & 7;
+				uint8_t chip = (blkInfoReads >> 10) & 3;
+				uint16_t blk = (blkInfoReads & 1023)*8+i;
+#else // MLC: 1-bit card, 3-bit bus, 3-bit chip, 9-bit (512) 8-blocks
 				uint8_t card = (blkInfoReads >> 15);
 				uint8_t bus = (blkInfoReads >> 12) & 7;
 				uint8_t chip = (blkInfoReads >> 9) & 7;
 				uint16_t blk = (blkInfoReads & 511)*8+i;
+#endif
 
 				_priv->blockStatus[card][bus][chip][blk] = (AmfManager::BlockStatusT)(blkinfo_vec[i]>>14);
 				_priv->blockPE[card][bus][chip][blk] = blkinfo_vec[i] & 0x3fff;

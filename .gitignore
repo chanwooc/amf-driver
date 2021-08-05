@@ -1,4 +1,8 @@
 *.a
 *.exe
-aftl.bin
+*aftl.bin
 obj/
+
+vivado.jou
+vivado.log
+

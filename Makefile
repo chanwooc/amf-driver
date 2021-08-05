@@ -9,6 +9,10 @@ INCLUDES := \
 
 CXXFLAGS += -std=c++11 -g
 
+ifdef SLC
+CXXFLAGS += -D SLC
+endif
+
 LIBS := \
 	-lm -lpthread -lrt
 
@@ -35,8 +39,9 @@ OBJS := \
 
 .PHONY: all clean build
 
+
 all: $(TARGET_NAME)
-$(TARGET_NAME): build $(OBJS)
+$(TARGET_NAME): build $(OBJS) AmfManager.h
 	$(AR) r $(@) $(OBJS)
 
 build:
@@ -65,4 +70,5 @@ badBlock.exe: $(TARGET_NAME) badBlock.cpp
 
 fastRead.exe: $(TARGET_NAME) badBlock.cpp
 	$(CXX) $(CXXFLAGS) -DWRITESYNC -DFASTREAD $(INCLUDES) -o $@ badBlock.cpp $(TARGET_NAME) $(LIBS)
+
 
