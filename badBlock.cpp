@@ -9,8 +9,8 @@
 #include "time.h"
 
 #define STARTPAGE (0*PAGES_PER_SEGMENT) // (1*PAGES_PER_SEGMENT)
-#define TESTNUM (50*PAGES_PER_SEGMENT) // (TOTAL_PAGES-PAGES_PER_SEGMENT*100)/512
-#define REPEAT 20
+#define TESTNUM (1000*PAGES_PER_SEGMENT) // (TOTAL_PAGES-PAGES_PER_SEGMENT*100)/512
+#define REPEAT 2
 
 int error_cnt;
 #ifdef WRITESYNC
@@ -145,8 +145,7 @@ int main(int argc, char *arv[]) {
 
 	for (unsigned int r=0; r< REPEAT; r++) {
 		for (unsigned int i=0; i< test_num; i++) {
-			if (i%2==0) continue; // TODO
-			uint32_t lba = start_page + r*test_num + i;
+			uint32_t lba = (start_page + r*test_num + i) % TOTAL_PAGES;
 			set_buf(buf,lba);
 			AmfWrite(am, lba, buf, (void*)(uintptr_t)lba);
 			numWrites++;
@@ -164,7 +163,6 @@ int main(int argc, char *arv[]) {
 		#endif
 
 #endif
-			if (i % (5*PAGES_PER_SEGMENT) == 0) usleep(1000*100);
 		}
 
 
@@ -184,7 +182,7 @@ int main(int argc, char *arv[]) {
 #else
 		fprintf(stderr, "WRITE only repeat=%u done\n", r);
 #endif
-		sleep(5);
+		sleep(2);
 
 #ifdef REOPEN
 		AmfClose(am); // close device and dump "aftl.bin"
@@ -198,8 +196,7 @@ int main(int argc, char *arv[]) {
 
 #ifndef FASTREAD
 		for (unsigned int i=0; i< test_num; i++) {
-			if (i%2==0) continue; // TODO
-			uint32_t lba = start_page + r*test_num + i;
+			uint32_t lba = (start_page + r*test_num + i) % TOTAL_PAGES;
 			test_struct *my_req = get_test_struct(lba);
 			AmfRead(am, lba, my_req->buf, (void*)my_req);
 			numReads++;
@@ -217,7 +214,7 @@ int main(int argc, char *arv[]) {
 		}
 
 		fprintf(stderr, "READ check repeat=%u done\n", r);
-		sleep(5);
+		sleep(2);
 #endif
 	}
 
