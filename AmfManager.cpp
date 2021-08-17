@@ -227,10 +227,6 @@ class AmfDeviceAck: public AmfIndicationWrapper {
 			for (int i =0; i<8; i++) {
 
 #ifdef SLC // 1-bit card, 3-bit bus, 2-bit chip, 9-bit (512) 8-blocks //10-bit (1024) 8-blocks
-				//uint8_t card = (blkInfoReads >> 15);
-				//uint8_t bus = (blkInfoReads >> 12) & 7;
-				//uint8_t chip = (blkInfoReads >> 10) & 3;
-				//uint16_t blk = (blkInfoReads & 1023)*8+i;
 				uint8_t card = (blkInfoReads >> 14);
 				uint8_t bus = (blkInfoReads >> 11) & 7;
 				uint8_t chip = (blkInfoReads >> 9) & 3;
@@ -423,7 +419,13 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 		for (int seg = 0; seg < NUM_SEGMENTS; seg++) {
 			for (int virt_blk = 0; virt_blk < NUM_VIRTBLKS; virt_blk++) {
 				if (mapStatus[seg][virt_blk] == ALLOCATED) {
-					uint32_t lpa = (virt_blk & (NUM_VIRTBLKS-1)) | (seg << 15); // reconstruct LPA
+
+					// LPA = [ seg | page | virt_blk ], virt_blk = [chip | bus | card]
+#ifdef SLC
+					uint32_t lpa = (seg << 13) | virt_blk; // SLC: virt_blk - 6bit (64) page - 7bit (128)
+#else
+					uint32_t lpa = (seg << 15) | virt_blk; // MLC: virt_blk - 7bit (128) page - 8bit (256)
+#endif
 					Erase(lpa, NULL);
 					cnt++;
 				}
@@ -443,7 +445,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 		fprintf(stderr, "Mapped entry (%d blocks) erased!!\n", cnt);
 
 
-	} else {
+	} else if (mode == 2) {
 		fprintf(stderr, "mode 2\n"); 
 		fprintf(stderr, "Resetting device; erase all blocks\n"); 
 		fprintf(stderr, "Existing AFTL & aftl.bin PE honored if exists\n"); 
