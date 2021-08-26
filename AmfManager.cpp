@@ -376,11 +376,12 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 
 	fprintf(stderr, "check aftl status and initilize the device\n"); 
 	if (mode == 0) {
-		fprintf(stderr, "mode 0\n"); 
+		fprintf(stderr, "AmfOpen: mode 0 (open as is)\n"); 
 		if (!__isAftlTableLoaded()) {
 			// if device table not programmed, must use local "aftl.bin"
+			fprintf(stderr, " --> AFTL not programmed... loading aftl.bin to AFTL\n"); 
 			if (AftlFileToDev("aftl.bin")) {
-				fprintf(stderr, "You must provide aftl.bin when mode=0 & device-aftl not programmed\n");
+				fprintf(stderr, "  --> You must provide aftl.bin when mode=0 & device-aftl not programmed\n");
 
 				delete dstDmaBuf;
 				delete srcDmaBuf;
@@ -393,12 +394,12 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 		}
 		fprintf(stderr, "AMF Ready to use\n"); 
 	} else if (mode == 1) {
-		fprintf(stderr, "mode 1\n"); 
+		fprintf(stderr, "AmfOpen: mode 1 (erase mapped only)\n"); 
 		// erase what is mapped
 		if (!__isAftlTableLoaded()) {
-
+			fprintf(stderr, " --> AFTL not programmed... loading aftl.bin to AFTL\n"); 
 			if (AftlFileToDev("aftl.bin")) {
-				fprintf(stderr, "You must provide aftl.bin when mode=1 & device-aftl not programmed\n");
+				fprintf(stderr, "  --> You must provide aftl.bin when mode=1 & device-aftl not programmed\n");
 
 				delete dstDmaBuf;
 				delete srcDmaBuf;
@@ -409,10 +410,10 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 			dev->setAftlLoaded();
 			aftlLoaded=true;
 		} else {
-			fprintf(stderr, "aftl info reading from device\n"); 
+			fprintf(stderr, " --> AFTL already loaded... \n"); 
 			__loadTableFromDev();
 		}
-		fprintf(stderr, "AFTL status OK & erasing mapped lpas\n"); 
+		fprintf(stderr, "AFTL status OK & erasing mapped entries....\n"); 
 
 		int cnt = 0;
 		// erase only mapped info
@@ -443,16 +444,15 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 			if (tagQ.size() == NUM_TAGS) break;
 		}
 		fprintf(stderr, "Mapped entry (%d blocks) erased!!\n", cnt);
-
-
+		fprintf(stderr, "AMF Ready to use\n"); 
 	} else if (mode == 2) {
-		fprintf(stderr, "mode 2\n"); 
-		fprintf(stderr, "Resetting device; erase all blocks\n"); 
-		fprintf(stderr, "Existing AFTL & aftl.bin PE honored if exists\n"); 
+		fprintf(stderr, "AmfOpen: mode 2 (Resetting all blocks)\n"); 
 
 		if (!__isAftlTableLoaded()) {
+			fprintf(stderr, " --> AFTL not programmed... aftl.bin PE honored if exists\n"); 
 			__readTableFromFile("aftl.bin");
 		} else {
+			fprintf(stderr, " --> Existing AFTL PE honored\n"); 
 			__loadTableFromDev();
 		}
 
@@ -484,6 +484,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 			if (tagQ.size() == NUM_TAGS) break;
 		}
 		fprintf(stderr, "All blocks erased!!\n");
+		fprintf(stderr, "AMF Ready to use\n"); 
 
 		__pushTableToDev();
 		dev->setAftlLoaded();
@@ -491,7 +492,6 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 	}
 
 
-	fprintf(stderr, "AmfManager Constructor (this: %p)\n", this); 
 	fprintf(stderr, " > Debug Stats\n"); 
 	dev->debugDumpReq(0);   // echo-back debug message
 	dev->debugDumpReq(1);   // echo-back debug message
@@ -502,9 +502,10 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 }
 
 AmfManager::~AmfManager() {
-	fprintf(stderr, "AmfManager Destructor (this: %p)\n", this); 
 	if (AftlDevToFile("aftl.bin")) {
 		fprintf(stderr, "[AmfManager] On close: failed to dump AFTL table data to aftl.bin\n");
+	} else {
+		fprintf(stderr, "[AmfManager] AFTL dumped to aftl.bin\n");
 	}
 
 	fprintf(stderr, " > Debug Stats\n"); 
