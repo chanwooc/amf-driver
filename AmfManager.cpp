@@ -373,6 +373,11 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 	pthread_mutex_init(&tagMutex, NULL);
 	pthread_cond_init(&tagWaitCond, 0);
 
+	fprintf(stderr, " > Debug Stats\n"); 
+	dev->debugDumpReq(0);   // echo-back debug message
+	dev->debugDumpReq(1);   // echo-back debug message
+	sleep(1);
+
 
 	fprintf(stderr, "check aftl status and initilize the device\n"); 
 	if (mode == 0) {
@@ -492,10 +497,6 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 	}
 
 
-	fprintf(stderr, " > Debug Stats\n"); 
-	dev->debugDumpReq(0);   // echo-back debug message
-	dev->debugDumpReq(1);   // echo-back debug message
-	sleep(1);
 
 	fprintf(stderr, "Done initializing Hardware & DMA!\n" ); 
 	fflush(stderr);
