@@ -1,10 +1,11 @@
-#VIVADO_PATH=/opt/Xilinx/Vivado/2018.1/bin
 
 MY_PATH=$(dirname $0)
 cd $MY_PATH
 
 # If multiple boards, use -tcl args flag:
 #  -tclargs 210203861260
+
+source $XILINX_HOME/Vivado/$XILINX_VERSION/settings64.sh
 
 ## Select MLC or SLC for flash drives
 if [ -n "$SLC" ]
