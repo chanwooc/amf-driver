@@ -9,7 +9,9 @@ INCLUDES := \
 
 CXXFLAGS += -std=c++11 -g
 
-ifdef SLC
+# SLC mode by default
+#  to build MLC file, use MLC=1 
+ifndef MLC
 CXXFLAGS += -D SLC
 endif
 

@@ -1,15 +1,27 @@
+#!/usr/bin/env bash
+
+if [[ $# -ne 1 ]]
+then
+	echo './program-vcu108.sh [0|1]'
+	echo '  0: SLC (default) or 1: MLC'
+	exit 1
+fi
+
+if [[ -z ${XILINX_HOME} ]] || [[ -z ${XILINX_VERSION} ]]
+then
+	echo 'set $XILINX_HOME and $XILINX_VERSION'
+	exit 1
+fi
 
 MY_PATH=$(dirname $0)
-cd $MY_PATH
+cd ${MY_PATH}
 
-# If multiple boards, use -tcl args flag:
-#  -tclargs 210203861260
+XILINX_DIR=${XILINX_HOME}/Vivado/${XILINX_VERSION}
+source ${XILINX_DIR}/settings64.sh
 
-source $XILINX_HOME/Vivado/$XILINX_VERSION/settings64.sh
-
-## Select MLC or SLC for flash drives
-if [ -n "$SLC" ]
+if [[ $1 -ne 1 ]]
 then
+	# If multiple boards, use -tcl args flag: -tclargs
 	vivado -nolog -nojournal -mode batch -source vcu108-slc.tcl 
 else
 	vivado -nolog -nojournal -mode batch -source vcu108-mlc.tcl 
