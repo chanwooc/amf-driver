@@ -46,4 +46,6 @@ int main() {
 	//  callback is ignored
 
 	AmfClose(am); // close device and dump "aftl.bin"
+
+	return 0;
 }

@@ -129,7 +129,7 @@ class AmfManager {
 
 		/* extra thread only for readDone */
 		pthread_t readChecker; //
-		bool killChecker; //
+		volatile bool killChecker; //
 
 		sem_t aftlStatusSem, aftlReadSem; //
 

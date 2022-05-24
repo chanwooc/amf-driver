@@ -117,4 +117,6 @@ int main() {
 	fprintf(stderr, "READ SPEED: %f MB/s\n", ((8192.0*1024*1024)/1000000)/timespec_diff_sec(start,now));
 
 	AmfClose(am); // close device and dump "aftl.bin"
+
+	return 0;
 }
