@@ -4,7 +4,6 @@ if [[ $# -ne 1 ]]
 then
 	echo './program-vcu108.sh [0|1]'
 	echo '  0: SLC (default) or 1: MLC'
-	exit 1
 fi
 
 if [[ -z ${XILINX_HOME} ]] || [[ -z ${XILINX_VERSION} ]]
@@ -19,12 +18,12 @@ cd ${MY_PATH}
 XILINX_DIR=${XILINX_HOME}/Vivado/${XILINX_VERSION}
 source ${XILINX_DIR}/settings64.sh
 
-if [[ $1 -ne 1 ]]
+if [[ $# -ge 1 ]] && [[ $1 -eq 1 ]]
 then
 	# If multiple boards, use -tcl args flag: -tclargs
-	vivado -nolog -nojournal -mode batch -source vcu108-slc.tcl 
-else
 	vivado -nolog -nojournal -mode batch -source vcu108-mlc.tcl 
+else
+	vivado -nolog -nojournal -mode batch -source vcu108-slc.tcl 
 fi
 
 pciescanportal
