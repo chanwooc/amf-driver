@@ -3,6 +3,6 @@
 *aftl.bin
 obj/
 
-vivado.jou
-vivado.log
+vivado*.jou
+vivado*.log
 
