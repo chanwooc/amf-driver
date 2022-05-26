@@ -8,6 +8,9 @@
 // Definition & other headers
 #include "AmfManager.h"
 
+
+#define MAP_PATH "/amf/aftl.bin"
+
 // Page Size (Physical chip support up to 8224 bytes, but using 8192 bytes for now)
 //  However, for DMA acks, we are using 8192*2 Bytes Buffer per TAG
 #define FPAGE_SIZE (8192*2)
@@ -383,9 +386,9 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 	if (mode == 0) {
 		fprintf(stderr, "AmfOpen: mode 0 (open as is)\n"); 
 		if (!__isAftlTableLoaded()) {
-			// if device table not programmed, must use local "aftl.bin"
+			// if device table not programmed, must use MAP_PATH
 			fprintf(stderr, " --> AFTL not programmed... loading aftl.bin to AFTL\n"); 
-			if (AftlFileToDev("aftl.bin")) {
+			if (AftlFileToDev(MAP_PATH)) {
 				fprintf(stderr, "  --> You must provide aftl.bin when mode=0 & device-aftl not programmed\n");
 
 				delete dstDmaBuf;
@@ -403,7 +406,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 		// erase what is mapped
 		if (!__isAftlTableLoaded()) {
 			fprintf(stderr, " --> AFTL not programmed... loading aftl.bin to AFTL\n"); 
-			if (AftlFileToDev("aftl.bin")) {
+			if (AftlFileToDev(MAP_PATH)) {
 				fprintf(stderr, "  --> You must provide aftl.bin when mode=1 & device-aftl not programmed\n");
 
 				delete dstDmaBuf;
@@ -455,7 +458,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 
 		if (!__isAftlTableLoaded()) {
 			fprintf(stderr, " --> AFTL not programmed... aftl.bin PE honored if exists\n"); 
-			__readTableFromFile("aftl.bin");
+			__readTableFromFile(MAP_PATH);
 		} else {
 			fprintf(stderr, " --> Existing AFTL PE honored\n"); 
 			__loadTableFromDev();
@@ -503,7 +506,7 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 }
 
 AmfManager::~AmfManager() {
-	if (AftlDevToFile("aftl.bin")) {
+	if (AftlDevToFile(MAP_PATH)) {
 		fprintf(stderr, "[AmfManager] On close: failed to dump AFTL table data to aftl.bin\n");
 	} else {
 		fprintf(stderr, "[AmfManager] AFTL dumped to aftl.bin\n");
