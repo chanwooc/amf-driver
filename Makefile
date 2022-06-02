@@ -67,6 +67,9 @@ example1.exe: $(TARGET_NAME) example1.cpp
 hardReset.exe: $(TARGET_NAME) hardReset.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ hardReset.cpp $(TARGET_NAME) $(LIBS)
 
+eraseMapped.exe: $(TARGET_NAME) eraseMapped.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ eraseMapped.cpp $(TARGET_NAME) $(LIBS)
+
 badBlock.exe: $(TARGET_NAME) badBlock.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $@ badBlock.cpp $(TARGET_NAME) $(LIBS)
 

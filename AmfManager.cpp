@@ -399,7 +399,11 @@ AmfManager::AmfManager(int mode) : killChecker(false), aftlLoaded(false), rCb(NU
 			}
 			dev->setAftlLoaded();
 			aftlLoaded=true;
+		} else {
+			fprintf(stderr, " --> AFTL already loaded... \n"); 
+			__loadTableFromDev();
 		}
+
 		fprintf(stderr, "AMF Ready to use\n"); 
 	} else if (mode == 1) {
 		fprintf(stderr, "AmfOpen: mode 1 (erase mapped only)\n"); 
